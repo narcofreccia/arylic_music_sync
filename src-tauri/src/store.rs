@@ -32,13 +32,27 @@ pub struct AuthConfig {
     pub password_hash: Option<String>,
 }
 
-/// A device the user added or discovered. Defined now so the config shape is
-/// stable; M2 (Linkplay client) is what actually fills it.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// A device the user added or discovered (FR-5/FR-6).
+///
+/// The UUID is the identity — it survives a DHCP lease change, which the IP
+/// does not, so it keys the config, the poller and every event. Live state
+/// (online, role, playback) is deliberately *not* stored here: it belongs to
+/// the poller's in-memory cache and would only ever be stale on disk.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+// Field-level defaults across the board: a config written by an older build
+// (or hand-edited) must degrade, never fail the whole load.
+#[serde(default)]
 pub struct SavedDevice {
-    pub id: String,
-    pub name: String,
+    pub uuid: String,
     pub ip: String,
+    /// Local friendly name (FR-7); `None` = show the device's own name.
+    pub alias: Option<String>,
+    /// Unix ms of the last successful contact, so an offline device can still
+    /// say when it was last around.
+    pub last_seen: Option<i64>,
+    /// Added by hand (FR-5) rather than discovered — M3's scan must not prune
+    /// these just because they didn't answer a sweep.
+    pub pinned_manual: bool,
 }
 
 /// User preferences (brief.md FR-20 / FR-27). Present with defaults from M1 so

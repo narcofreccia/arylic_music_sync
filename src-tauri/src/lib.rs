@@ -6,11 +6,15 @@
 //! the webview) sidesteps CORS/mixed-content entirely — see brief.md NFR-4.
 //!
 //! The SvelteKit frontend talks to it exclusively through Tauri commands and
-//! events. M1 ships the local-profile auth surface (`commands::auth`); the
-//! device layers land in M2+.
+//! events. M1 ships the local-profile auth surface (`commands::auth`); M2 adds
+//! the Linkplay client, the per-device poller and manual device management.
+//! Discovery (M3), grouping (M4) and the Group Guard (M5) follow.
 
 pub mod commands;
 pub mod error;
+pub mod linkplay;
+pub mod net;
+pub mod poller;
 pub mod state;
 pub mod store;
 
@@ -38,6 +42,10 @@ pub fn run() {
                 store::Config::default()
             });
             app.manage(AppState::new(config));
+            // FR-6: re-poll the known devices from launch, so the list already
+            // shows real online/offline state by the time the user gets past
+            // the login screen.
+            poller::start_saved(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -48,6 +56,13 @@ pub fn run() {
             commands::auth::set_password,
             commands::auth::remove_password,
             commands::auth::set_remember_me,
+            commands::devices::add_device,
+            commands::devices::remove_device,
+            commands::devices::rename_device,
+            commands::devices::list_devices,
+            commands::devices::get_status,
+            commands::devices::refresh_device,
+            commands::devices::local_address,
         ])
         .run(tauri::generate_context!())
         .expect("error while running MusicSync");

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppErrorPayload, AuthState } from "$lib/types";
+import type { AppErrorPayload, AuthState, DeviceDetail, DeviceSnapshot } from "$lib/types";
 
 /**
  * Typed wrappers over the Rust auth commands. Keeping the `invoke` strings in
@@ -24,6 +24,30 @@ export const commands = {
   removePassword: (current: string) => invoke<void>("remove_password", { current }),
 
   setRememberMe: (value: boolean) => invoke<void>("set_remember_me", { value }),
+
+  // ------------------------------------------------------------- devices --
+
+  /** FR-5: validate an IP via `getStatusEx` and persist it. Rejects on dupes. */
+  addDevice: (ip: string) => invoke<DeviceSnapshot>("add_device", { ip }),
+
+  /** FR-8. */
+  removeDevice: (uuid: string) => invoke<void>("remove_device", { uuid }),
+
+  /** FR-7. `alias: null` restores the device's own name. */
+  renameDevice: (uuid: string, alias: string | null, pushToDevice: boolean) =>
+    invoke<DeviceSnapshot>("rename_device", { uuid, alias, pushToDevice }),
+
+  /** FR-6: the persisted list, hydrated with the poller's latest state. */
+  listDevices: () => invoke<DeviceSnapshot[]>("list_devices"),
+
+  /** FR-9: a live round trip, including the raw unmodelled fields. */
+  getStatus: (uuid: string) => invoke<DeviceDetail>("get_status", { uuid }),
+
+  /** Wake the device's poll loop instead of waiting out the interval. */
+  refreshDevice: (uuid: string) => invoke<void>("refresh_device", { uuid }),
+
+  /** This machine's LAN address — a hint for the manual-add form. */
+  localAddress: () => invoke<string | null>("local_address"),
 };
 
 /** True when the rejection is the Rust `{ code, message }` envelope. */

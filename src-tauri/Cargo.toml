@@ -34,6 +34,9 @@ futures-util = "0.3"
 
 # Linkplay HTTP API client (plain http:// on the LAN — no TLS backend needed).
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
+# Linkplay quirks: hex-encoded track metadata, URL-encoded setDeviceName.
+hex = "0.4"
+percent-encoding = "2"
 
 # Discovery: mDNS browse + subnet sweep over the local interfaces.
 mdns-sd = "0.11"

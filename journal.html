@@ -60,7 +60,7 @@
         <h1>MusicSync — Project Journal</h1>
         <div class="sub">
           Arylic LP10 LAN multiroom controller — Tauri v2 + SvelteKit (Svelte 5) + Rust, Linkplay HTTP API.
-          &nbsp;·&nbsp; Last updated: <strong>2026-08-08</strong> &nbsp;·&nbsp; Current: <span class="pill">Infra + M1 done · <strong>M2 Linkplay client wip</strong> · hardware spike (FR-23) pending an LP10 on the LAN</span>
+          &nbsp;·&nbsp; Last updated: <strong>2026-08-08</strong> &nbsp;·&nbsp; Current: <span class="pill">Infra + M1 + M2 software done · next: <strong>M3 discovery</strong> · FR-23 hardware spike still pending an LP10 on the LAN</span>
         </div>
         <div class="howto">
           <strong>How to use.</strong> Living source of truth for progress &amp; focus (referenced from <code>CLAUDE.md</code>).
@@ -76,7 +76,7 @@
           <span><span class="badge status blocked">blocked</span> needs a decision/input</span>
         </div>
         <div class="kpi">
-          <div class="box"><b>2 / 7</b><span>phases done (Infra, M1)</span></div>
+          <div class="box"><b>3 / 7</b><span>phases done (Infra, M1, M2*)</span></div>
           <div class="box"><b>0.1.0</b><span>version (unreleased)</span></div>
           <div class="box"><b>0</b><span>releases published</span></div>
         </div>
@@ -109,12 +109,12 @@
       </details>
 
       <details class="phase" open>
-        <summary><span class="badge status wip">wip</span><span class="title"><h3>M2 — Linkplay client, manual add, device list</h3> <small>FR-5..9, part of FR-18/19</small></span></summary>
+        <summary><span class="badge status done">done</span><span class="title"><h3>M2 — Linkplay client, manual add, device list</h3> <small>FR-5..9, part of FR-18/19 · software 2026-08-08, spike pending</small></span></summary>
         <div class="body">
           <ul class="tasks">
-            <li><span class="badge status wip">wip</span><span class="t">Typed client (<code>LinkplayCommand::to_query()</code> single chokepoint), tolerant serde models, hex Title/Artist decode</span></li>
-            <li><span class="badge status wip">wip</span><span class="t">Per-device poller (3 s fixed v1, offline backoff 5/10/30 s), <code>device-updated</code>/<code>device-offline</code> events</span></li>
-            <li><span class="badge status wip">wip</span><span class="t">Add by IP, rename (+push to device), remove, detail view with raw-JSON debug pane; Devices page + dashboard cards</span></li>
+            <li><span class="badge status done">done</span><span class="t">Typed client (<code>LinkplayCommand::to_query()</code> single chokepoint), tolerant serde models, hex Title/Artist decode</span></li>
+            <li><span class="badge status done">done</span><span class="t">Per-device poller (3 s fixed v1, offline backoff 5/10/30 s), <code>device-updated</code>/<code>device-offline</code> events</span></li>
+            <li><span class="badge status done">done</span><span class="t">Add by IP, rename (+push to device), remove, detail view with raw-JSON debug pane; Devices page + dashboard cards</span></li>
             <li><span class="badge status blocked">blocked</span><span class="t"><strong>FR-23 hardware spike</strong> — run <code>docs/firmware-notes.md</code> checklist against a real LP10 (join-variant, slave Ungroup semantics, Spotify Connect detach behavior, emoji rename). Gates M4/M5 defaults. <em>Needs: an LP10 powered on + user present.</em></span></li>
           </ul>
         </div>

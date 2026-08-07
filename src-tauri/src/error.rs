@@ -23,6 +23,15 @@ pub enum AppError {
     #[error("{0}")]
     InvalidInput(String),
 
+    /// A device was unreachable, timed out, or answered something we can't use.
+    /// Routine on a LAN (NFR-3), so the UI shows it inline rather than as a fault.
+    #[error("{0}")]
+    Device(String),
+
+    /// No device with that UUID is in the saved list — a stale UI reference.
+    #[error("{0}")]
+    NotFound(String),
+
     /// A bug or an environment failure — never actionable by the user.
     #[error("{0}")]
     Internal(String),
@@ -36,6 +45,8 @@ impl AppError {
             AppError::Auth(_) => "auth_error",
             AppError::LockedOut { .. } => "locked_out",
             AppError::InvalidInput(_) => "invalid_input",
+            AppError::Device(_) => "device_error",
+            AppError::NotFound(_) => "not_found",
             AppError::Internal(_) => "internal_error",
         }
     }

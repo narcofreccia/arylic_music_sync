@@ -6,6 +6,7 @@
   import { page } from "$app/state";
   import { updates } from "$lib/stores/updates.svelte";
   import { session } from "$lib/stores/session.svelte";
+  import { devices } from "$lib/stores/devices.svelte";
 
   let { children } = $props();
 
@@ -19,6 +20,14 @@
     void session.init();
     // Silent launch check — offline/LAN-only use is normal, so never surfaces.
     void updates.start();
+    return () => devices.stop();
+  });
+
+  // Device events are subscribed here, once, and only after auth clears — a
+  // page-level listener would stack a new subscription per navigation. start()
+  // is idempotent, so re-running this effect is harmless.
+  $effect(() => {
+    if (session.loggedIn) void devices.start();
   });
 
   // Route guard. Runs on every session/route change; each branch only navigates
@@ -78,6 +87,14 @@
           '/'
             ? 'text-white'
             : 'text-slate-400'}">Dashboard</a
+        >
+        <a
+          href="/devices"
+          class="rounded px-2 py-1 transition-colors hover:bg-[var(--color-surface-raised)] {path.startsWith(
+            '/devices'
+          )
+            ? 'text-white'
+            : 'text-slate-400'}">Devices</a
         >
         <a
           href="/settings"

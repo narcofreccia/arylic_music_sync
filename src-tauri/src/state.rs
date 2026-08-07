@@ -4,6 +4,8 @@
 use std::sync::{Mutex, RwLock};
 use std::time::{Duration, Instant};
 
+use crate::linkplay::client::{LinkplayClient, DEFAULT_TIMEOUT};
+use crate::poller::Poller;
 use crate::store::Config;
 
 /// Failed logins allowed before the cool-down kicks in.
@@ -62,6 +64,10 @@ pub struct AppState {
     pub config: RwLock<Config>,
     pub session: RwLock<Session>,
     pub throttle: Mutex<LoginThrottle>,
+    /// One HTTP client for every device call — shared so connections pool.
+    pub linkplay: LinkplayClient,
+    /// Per-device poll tasks and their last-known snapshots.
+    pub poller: Poller,
 }
 
 impl AppState {
@@ -70,6 +76,8 @@ impl AppState {
             config: RwLock::new(config),
             session: RwLock::new(Session::default()),
             throttle: Mutex::new(LoginThrottle::default()),
+            linkplay: LinkplayClient::new(DEFAULT_TIMEOUT),
+            poller: Poller::default(),
         }
     }
 
