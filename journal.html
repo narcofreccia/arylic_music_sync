@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MusicSync — Project Journal</title>
+    <style>
+      :root {
+        --bg: #0f1115; --panel: #171a21; --panel-2: #1e222b; --fg: #e6e8ec;
+        --muted: #9aa3b2; --border: #2a2f3a; --accent: #38bdf8;
+        --done: #34d399; --wip: #fbbf24; --todo: #94a3b8; --blocked: #f87171;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+      .wrap { max-width: 1040px; margin: 0 auto; padding: 32px 24px 80px; }
+      header.page { border-bottom: 1px solid var(--border); padding-bottom: 18px; margin-bottom: 26px; }
+      h1 { margin: 0 0 4px; font-size: 26px; }
+      h2 { margin: 38px 0 12px; font-size: 19px; border-left: 3px solid var(--accent); padding-left: 10px; }
+      h3 { margin: 0; font-size: 16px; }
+      .sub { color: var(--muted); font-size: 13px; }
+      a { color: var(--accent); }
+      code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+      .howto { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin: 16px 0 0; font-size: 13.5px; color: var(--muted); }
+      .legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 14px 0 0; font-size: 13px; }
+      .badge { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid; vertical-align: middle; white-space: nowrap; }
+      .status.done { color: var(--done); border-color: var(--done); }
+      .status.wip { color: var(--wip); border-color: var(--wip); }
+      .status.todo { color: var(--todo); border-color: var(--todo); }
+      .status.blocked { color: var(--blocked); border-color: var(--blocked); }
+      .pill { background: var(--panel-2); border:1px solid var(--border); border-radius:999px; padding:2px 10px; font-size:12px; color:var(--muted); }
+      details.phase { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; margin: 12px 0; overflow: hidden; }
+      details.phase > summary { list-style: none; cursor: pointer; padding: 14px 18px; display: flex; align-items: center; gap: 12px; }
+      details.phase > summary::-webkit-details-marker { display: none; }
+      details.phase > summary::before { content: "▸"; color: var(--muted); }
+      details.phase[open] > summary::before { content: "▾"; }
+      details.phase .body { padding: 6px 18px 18px 40px; border-top: 1px solid var(--border); }
+      .phase .title { flex: 1; }
+      .phase .title small { color: var(--muted); font-weight: 400; }
+      ul.tasks { list-style: none; padding: 0; margin: 8px 0; }
+      ul.tasks li { padding: 7px 0; border-bottom: 1px dashed var(--border); display: flex; gap: 10px; align-items: baseline; }
+      ul.tasks li:last-child { border-bottom: none; }
+      ul.tasks .t { flex: 1; }
+      .note { color: var(--muted); font-size: 13px; }
+      .note::before { content: "📝 "; }
+      table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 13px; }
+      th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+      th { color: var(--muted); font-weight: 600; }
+      td.path { font-family: ui-monospace, Menlo, monospace; color: #cdd3dd; white-space: nowrap; }
+      .editable { background: var(--panel); border: 1px dashed var(--border); border-radius: 10px; padding: 14px 16px; margin: 10px 0; }
+      .editable h3 { margin-bottom: 6px; }
+      footer { margin-top: 40px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); padding-top: 14px; }
+      .kpi { display:flex; gap:10px; flex-wrap:wrap; margin:14px 0 0; }
+      .kpi .box { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:8px 14px; }
+      .kpi .box b { font-size:18px; } .kpi .box span { color:var(--muted); font-size:12px; display:block; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="page">
+        <h1>MusicSync — Project Journal</h1>
+        <div class="sub">
+          Arylic LP10 LAN multiroom controller — Tauri v2 + SvelteKit (Svelte 5) + Rust, Linkplay HTTP API.
+          &nbsp;·&nbsp; Last updated: <strong>2026-08-08</strong> &nbsp;·&nbsp; Current: <span class="pill">Infra + M1 done · <strong>M2 Linkplay client wip</strong> · hardware spike (FR-23) pending an LP10 on the LAN</span>
+        </div>
+        <div class="howto">
+          <strong>How to use.</strong> Living source of truth for progress &amp; focus (referenced from <code>CLAUDE.md</code>).
+          Edit freely — reorder priorities, flip a <span class="badge status todo">todo</span> to
+          <span class="badge status wip">wip</span>, add notes, or write direction in the
+          <em>Notes &amp; priorities</em> box at the bottom. Claude re-reads this each session and updates statuses as work lands.
+          Status is encoded in the markup (<code>class="status done|wip|todo|blocked"</code> + the label) so manual edits stick.
+        </div>
+        <div class="legend">
+          <span><span class="badge status done">done</span> finished &amp; verified</span>
+          <span><span class="badge status wip">wip</span> in progress</span>
+          <span><span class="badge status todo">todo</span> not started</span>
+          <span><span class="badge status blocked">blocked</span> needs a decision/input</span>
+        </div>
+        <div class="kpi">
+          <div class="box"><b>2 / 7</b><span>phases done (Infra, M1)</span></div>
+          <div class="box"><b>0.1.0</b><span>version (unreleased)</span></div>
+          <div class="box"><b>0</b><span>releases published</span></div>
+        </div>
+      </header>
+
+      <h2>Phase board</h2>
+
+      <details class="phase" open>
+        <summary><span class="badge status done">done</span><span class="title"><h3>Infra — Scaffold, git, release pipeline</h3> <small>2026-08-07</small></span></summary>
+        <div class="body">
+          <ul class="tasks">
+            <li><span class="badge status done">done</span><span class="t">Flat single-package Tauri 2.11 + SvelteKit 5 + Tailwind 4 scaffold; placeholder icons; updater store wired</span></li>
+            <li><span class="badge status done">done</span><span class="t">Git → <code>github.com/narcofreccia/arylic_music_sync</code>; secrets-clean first commit</span></li>
+            <li><span class="badge status done">done</span><span class="t">Release pipeline: <code>scripts/build_release.sh</code> (mac sign/notarize → R2), <code>publish_windows.sh</code> + <code>release-windows.yml</code>, shared <code>merge_manifest.py</code> with downgrade guard</span></li>
+            <li><span class="badge status done">done</span><span class="t">Updater keypair <code>~/.tauri/musicsync.key</code>, pubkey baked; 4 GitHub secrets set; all release gates drill-tested</span></li>
+          </ul>
+          <p class="note">R2 layout: <code>storage/music_sync/{latest.json, mac/, windows/}</code>, public base <code>pub-7b3e…r2.dev/music_sync</code>. Node pinned Vite 6/TS 5.9 stack (local Node 20.16); bump Node ≥ 20.19 to move to Vite 8.</p>
+        </div>
+      </details>
+
+      <details class="phase" open>
+        <summary><span class="badge status done">done</span><span class="title"><h3>M1 — Auth: first-run wizard, login</h3> <small>FR-1..3 · 2026-08-07</small></span></summary>
+        <div class="body">
+          <ul class="tasks">
+            <li><span class="badge status done">done</span><span class="t">Setup wizard (username + password/PIN, argon2), login with 5-fail → 30 s lockout, remember-me</span></li>
+            <li><span class="badge status done">done</span><span class="t">Settings → Account: change/remove password (remove keeps profile, clears hash)</span></li>
+            <li><span class="badge status done">done</span><span class="t">tauri-plugin-store persistence + in-memory mirror; route guard in layout; 8 unit tests</span></li>
+          </ul>
+        </div>
+      </details>
+
+      <details class="phase" open>
+        <summary><span class="badge status wip">wip</span><span class="title"><h3>M2 — Linkplay client, manual add, device list</h3> <small>FR-5..9, part of FR-18/19</small></span></summary>
+        <div class="body">
+          <ul class="tasks">
+            <li><span class="badge status wip">wip</span><span class="t">Typed client (<code>LinkplayCommand::to_query()</code> single chokepoint), tolerant serde models, hex Title/Artist decode</span></li>
+            <li><span class="badge status wip">wip</span><span class="t">Per-device poller (3 s fixed v1, offline backoff 5/10/30 s), <code>device-updated</code>/<code>device-offline</code> events</span></li>
+            <li><span class="badge status wip">wip</span><span class="t">Add by IP, rename (+push to device), remove, detail view with raw-JSON debug pane; Devices page + dashboard cards</span></li>
+            <li><span class="badge status blocked">blocked</span><span class="t"><strong>FR-23 hardware spike</strong> — run <code>docs/firmware-notes.md</code> checklist against a real LP10 (join-variant, slave Ungroup semantics, Spotify Connect detach behavior, emoji rename). Gates M4/M5 defaults. <em>Needs: an LP10 powered on + user present.</em></span></li>
+          </ul>
+        </div>
+      </details>
+
+      <details class="phase">
+        <summary><span class="badge status todo">todo</span><span class="title"><h3>M3 — Discovery</h3> <small>FR-4 · mDNS + SSDP + subnet sweep</small></span></summary>
+        <div class="body">
+          <ul class="tasks">
+            <li><span class="badge status todo">todo</span><span class="t">mDNS (<code>mdns-sd</code>) + hand-rolled tokio SSDP M-SEARCH (not <code>ssdp-client</code> — pulls async-std) + /24 sweep (Semaphore 64)</span></li>
+            <li><span class="badge status todo">todo</span><span class="t">Progress events, cancel, CIDR override, dedupe by uuid vs known devices</span></li>
+          </ul>
+        </div>
+      </details>
+
+      <details class="phase">
+        <summary><span class="badge status todo">todo</span><span class="title"><h3>M4 — Grouping + master naming</h3> <small>FR-10..14, FR-22</small></span></summary>
+        <div class="body">
+          <ul class="tasks">
+            <li><span class="badge status todo">todo</span><span class="t">Sync all / custom groups / ungroup / promote; per-device retry + error surface</span></li>
+            <li><span class="badge status todo">todo</span><span class="t">FR-22 naming templates with names-snapshot persisted <em>before</em> rename (crash-safe restore, incl. across restart)</span></li>
+          </ul>
+        </div>
+      </details>
+
+      <details class="phase">
+        <summary><span class="badge status todo">todo</span><span class="title"><h3>M5 — Volume, transport, now playing, Group Guard</h3> <small>FR-15..19, FR-24..26</small></span></summary>
+        <div class="body">
+          <ul class="tasks">
+            <li><span class="badge status todo">todo</span><span class="t">Optimistic volume (80 ms debounce, 1.2 s grace, rollback), proportional master slider, slave volume via master</span></li>
+            <li><span class="badge status todo">todo</span><span class="t">Group Guard state machine: ask/always/never, flapping suppression, 5 s settling window, master failover</span></li>
+            <li><span class="badge status todo">todo</span><span class="t">Adaptive polling (2 s focused+grouped → 8 s blurred idle); Spotify Connect hint on dashboard</span></li>
+          </ul>
+        </div>
+      </details>
+
+      <details class="phase">
+        <summary><span class="badge status todo">todo</span><span class="title"><h3>M6 — Settings, packaging, polish</h3> <small>FR-20/21/27, NFR-5</small></span></summary>
+        <div class="body">
+          <ul class="tasks">
+            <li><span class="badge status todo">todo</span><span class="t">Full settings (polling, subnet, theme, autostart, guard modes, naming template), export/import (auth hash stripped)</span></li>
+            <li><span class="badge status todo">todo</span><span class="t">Vitest/cargo tests (hexstr, volume math, guard machine); binary &lt; 20 MB; idle CPU ≈ 0</span></li>
+            <li><span class="badge status todo">todo</span><span class="t">First real release: mac <code>build_release.sh</code> → <code>gh workflow run release-windows</code> → staged updater test 0.1.0 → 0.1.1</span></li>
+          </ul>
+        </div>
+      </details>
+
+      <h2>Commit log</h2>
+      <table>
+        <thead><tr><th>Date</th><th>Commit</th><th>Summary</th></tr></thead>
+        <tbody>
+          <tr><td>2026-08-07</td><td class="path">bc1e332</td><td>Scaffold MusicSync: Tauri 2 + SvelteKit 5 + Tailwind 4, R2 release pipeline</td></tr>
+          <tr><td>2026-08-07</td><td class="path">813c676</td><td>M1: local auth — first-run wizard, argon2 login, remember-me, settings account section</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Decisions</h2>
+      <p class="note">2026-08-07 — Single flat package (no monorepo): no shared-types consumer exists; promoting to a workspace later is mechanical.</p>
+      <p class="note">2026-08-07 — reqwest built with <code>.no_proxy()</code> and no TLS features: all device traffic is plain LAN HTTP; a system proxy must never swallow it.</p>
+      <p class="note">2026-08-07 — Remove-password keeps the profile (hash → None) instead of un-configuring, so the wizard doesn't re-trigger.</p>
+      <p class="note">2026-08-08 — Group Guard defaults stay unfrozen until the FR-23 spike lands; <code>to_query()</code> and role derivation are the two cheap-to-rewrite chokepoints.</p>
+
+      <div class="editable">
+        <h3>Notes &amp; priorities (user-owned — Claude reads, never overwrites)</h3>
+        <p class="sub">Write direction here: priorities, device IPs for testing, findings, anything.</p>
+      </div>
+
+      <footer>MusicSync · journal.html is self-contained (no external assets) · referenced from CLAUDE.md</footer>
+    </div>
+  </body>
+</html>
