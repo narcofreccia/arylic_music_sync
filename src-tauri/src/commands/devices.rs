@@ -31,6 +31,12 @@ fn saved(app: &AppHandle, uuid: &str) -> AppResult<SavedDevice> {
 /// reachable box that answers `getStatusEx` with a UUID is an LP10 as far as
 /// this app is concerned. Nothing is persisted until that succeeds, so a typo
 /// never leaves a phantom entry behind.
+///
+/// **Idempotent since M3.** Adding a UUID that is already saved refreshes its
+/// IP instead of failing. FR-4's "add all" would otherwise have to filter the
+/// already-added candidates *and* be right about it, and a speaker that took a
+/// new DHCP lease would be un-re-addable — the very case where re-adding it by
+/// its new address is exactly what the user means.
 #[tauri::command]
 pub async fn add_device(app: AppHandle, ip: String) -> AppResult<DeviceSnapshot> {
     let ip = ip.trim().to_string();
@@ -62,11 +68,8 @@ pub async fn add_device(app: AppHandle, ip: String) -> AppResult<DeviceSnapshot>
         // Identity is the UUID, so the same speaker reached on a new IP is an
         // update, not a duplicate.
         if let Some(existing) = config.devices.iter_mut().find(|d| d.uuid == entry.uuid) {
-            if existing.ip == entry.ip {
-                let label = existing.alias.clone().unwrap_or_else(|| entry.ip.clone());
-                return Err(AppError::InvalidInput(format!(
-                    "{label} is already in your device list."
-                )));
+            if existing.ip != entry.ip {
+                log::info!("{} moved from {} to {}", entry.uuid, existing.ip, entry.ip);
             }
             existing.ip = entry.ip.clone();
             existing.last_seen = entry.last_seen;

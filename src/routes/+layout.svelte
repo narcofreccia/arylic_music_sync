@@ -7,6 +7,7 @@
   import { updates } from "$lib/stores/updates.svelte";
   import { session } from "$lib/stores/session.svelte";
   import { devices } from "$lib/stores/devices.svelte";
+  import { scan } from "$lib/stores/scan.svelte";
 
   let { children } = $props();
 
@@ -20,14 +21,22 @@
     void session.init();
     // Silent launch check — offline/LAN-only use is normal, so never surfaces.
     void updates.start();
-    return () => devices.stop();
+    return () => {
+      devices.stop();
+      scan.stop();
+    };
   });
 
-  // Device events are subscribed here, once, and only after auth clears — a
-  // page-level listener would stack a new subscription per navigation. start()
-  // is idempotent, so re-running this effect is harmless.
+  // Device and scan events are subscribed here, once, and only after auth
+  // clears — a page-level listener would stack a new subscription per
+  // navigation. Both start() calls are idempotent, so re-running this effect is
+  // harmless. The scan store must be listening before the devices page can
+  // start a scan, hence here rather than on that page.
   $effect(() => {
-    if (session.loggedIn) void devices.start();
+    if (session.loggedIn) {
+      void devices.start();
+      void scan.start();
+    }
   });
 
   // Route guard. Runs on every session/route change; each branch only navigates

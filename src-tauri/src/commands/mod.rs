@@ -2,3 +2,5 @@
 
 pub mod auth;
 pub mod devices;
+pub mod scan;
+pub mod settings;

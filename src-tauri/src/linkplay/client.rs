@@ -15,6 +15,15 @@ use crate::error::{AppError, AppResult};
 /// polling cycle).
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(2);
 
+/// Total budget for one discovery probe (M3). A sweep touches every address in
+/// the subnet, so the 2 s poll timeout would make a /24 take minutes.
+pub const PROBE_TIMEOUT: Duration = Duration::from_millis(800);
+
+/// Connect budget for a discovery probe. This is the one that matters: almost
+/// every address in a sweep is empty, and an empty address either refuses
+/// instantly or never answers — waiting past a LAN round trip buys nothing.
+pub const PROBE_CONNECT_TIMEOUT: Duration = Duration::from_millis(350);
+
 /// Retry schedule for the commands that mutate group state (FR-14). Defined
 /// here so M4 inherits the tuned values rather than inventing its own.
 const RETRY_BACKOFF_MS: [u64; 3] = [200, 600, 1400];
@@ -130,11 +139,24 @@ impl LinkplayCommand {
 #[derive(Debug, Clone)]
 pub struct LinkplayClient {
     http: reqwest::Client,
+    /// Kept so the timeout message quotes the budget this client actually had —
+    /// the discovery probe's is not the poller's.
+    timeout: Duration,
 }
 
 impl LinkplayClient {
     pub fn new(timeout: Duration) -> Self {
-        let http = reqwest::Client::builder()
+        Self::build(timeout, None)
+    }
+
+    /// The discovery client (M3): the same API surface on a short fuse, with an
+    /// explicit connect timeout so a sweep isn't paced by unreachable hosts.
+    pub fn probe() -> Self {
+        Self::build(PROBE_TIMEOUT, Some(PROBE_CONNECT_TIMEOUT))
+    }
+
+    fn build(timeout: Duration, connect_timeout: Option<Duration>) -> Self {
+        let mut builder = reqwest::Client::builder()
             .timeout(timeout)
             // CRITICAL: a system/corporate HTTP proxy would happily swallow
             // these LAN calls (or answer them with an error page), and the user
@@ -143,15 +165,17 @@ impl LinkplayClient {
             .no_proxy()
             // Devices are polled every few seconds; keeping the connection warm
             // saves a handshake per poll per device.
-            .pool_idle_timeout(Duration::from_secs(30))
-            .build()
-            .unwrap_or_else(|e| {
-                // Only fails if the TLS/DNS backend can't initialise; a default
-                // client still beats bringing the app down at startup.
-                log::error!("falling back to a default HTTP client: {e}");
-                reqwest::Client::new()
-            });
-        Self { http }
+            .pool_idle_timeout(Duration::from_secs(30));
+        if let Some(connect_timeout) = connect_timeout {
+            builder = builder.connect_timeout(connect_timeout);
+        }
+        let http = builder.build().unwrap_or_else(|e| {
+            // Only fails if the TLS/DNS backend can't initialise; a default
+            // client still beats bringing the app down at startup.
+            log::error!("falling back to a default HTTP client: {e}");
+            reqwest::Client::new()
+        });
+        Self { http, timeout }
     }
 
     /// `GET http://<ip>/httpapi.asp?command=<query>`, returning the raw body.
@@ -160,7 +184,7 @@ impl LinkplayClient {
         let url = format!("http://{ip}/httpapi.asp?command={query}");
         let response = self.http.get(&url).send().await.map_err(|e| {
             AppError::Device(if e.is_timeout() {
-                format!("{ip} did not answer within {}s.", DEFAULT_TIMEOUT.as_secs())
+                format!("{ip} did not answer within {}ms.", self.timeout.as_millis())
             } else {
                 format!("{ip} is unreachable: {e}")
             })

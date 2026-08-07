@@ -4,6 +4,7 @@
 use std::sync::{Mutex, RwLock};
 use std::time::{Duration, Instant};
 
+use crate::discovery::ScanControl;
 use crate::linkplay::client::{LinkplayClient, DEFAULT_TIMEOUT};
 use crate::poller::Poller;
 use crate::store::Config;
@@ -68,6 +69,8 @@ pub struct AppState {
     pub linkplay: LinkplayClient,
     /// Per-device poll tasks and their last-known snapshots.
     pub poller: Poller,
+    /// The one-scan-at-a-time slot (FR-4); holds the running scan's cancel token.
+    pub scan: ScanControl,
 }
 
 impl AppState {
@@ -78,6 +81,7 @@ impl AppState {
             throttle: Mutex::new(LoginThrottle::default()),
             linkplay: LinkplayClient::new(DEFAULT_TIMEOUT),
             poller: Poller::default(),
+            scan: ScanControl::default(),
         }
     }
 

@@ -116,6 +116,47 @@ export interface DeviceDetail {
   playerExtra: Record<string, unknown>;
 }
 
+// ------------------------------------------------------------- discovery --
+
+/** Which discovery strategy a `scan-progress` event is reporting on (FR-4). */
+export type ScanPhase = "mdns" | "ssdp" | "sweep";
+
+/** `scan` arguments. `sweep` defaults on; `cidr` null = settings, then auto. */
+export interface ScanOptions {
+  sweep: boolean;
+  cidr: string | null;
+}
+
+/**
+ * A device found by a scan — confirmed via `getStatusEx`, but *not* saved.
+ * Adding one goes through the normal `add_device` path (FR-5).
+ */
+export interface DeviceCandidate {
+  uuid: string;
+  ip: string;
+  /** The device's own name; candidates have no local alias yet. */
+  name: string;
+  firmware: string;
+  rssi: number | null;
+  /** Already in the saved list — matched on UUID, so a DHCP move still counts. */
+  alreadyAdded: boolean;
+}
+
+/** Progress for one strategy. `total` is 0 for mDNS/SSDP (no denominator). */
+export interface ScanProgress {
+  phase: ScanPhase;
+  scanned: number;
+  total: number;
+  /** Candidates confirmed so far, across all strategies. */
+  found: number;
+}
+
+/** The scan ended — normally, or because it was cancelled. */
+export interface ScanComplete {
+  found: number;
+  cancelled: boolean;
+}
+
 /** User preferences (FR-20 / FR-27), persisted in settings.json. */
 export interface Settings {
   poll_ms: number;

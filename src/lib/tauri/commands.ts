@@ -1,5 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppErrorPayload, AuthState, DeviceDetail, DeviceSnapshot } from "$lib/types";
+import type {
+  AppErrorPayload,
+  AuthState,
+  DeviceCandidate,
+  DeviceDetail,
+  DeviceSnapshot,
+  ScanOptions,
+  Settings,
+} from "$lib/types";
 
 /**
  * Typed wrappers over the Rust auth commands. Keeping the `invoke` strings in
@@ -27,7 +35,10 @@ export const commands = {
 
   // ------------------------------------------------------------- devices --
 
-  /** FR-5: validate an IP via `getStatusEx` and persist it. Rejects on dupes. */
+  /**
+   * FR-5: validate an IP via `getStatusEx` and persist it. Idempotent — adding
+   * a device that is already saved refreshes its IP instead of failing.
+   */
   addDevice: (ip: string) => invoke<DeviceSnapshot>("add_device", { ip }),
 
   /** FR-8. */
@@ -48,6 +59,25 @@ export const commands = {
 
   /** This machine's LAN address — a hint for the manual-add form. */
   localAddress: () => invoke<string | null>("local_address"),
+
+  // ---------------------------------------------------------- discovery --
+
+  /**
+   * FR-4: mDNS + SSDP + optional subnet sweep, run concurrently. Resolves with
+   * the confirmed candidates; progress and hits stream as events meanwhile.
+   * A second call cancels the running scan and restarts.
+   */
+  scan: (options: ScanOptions) => invoke<DeviceCandidate[]>("scan", { options }),
+
+  /** Stop the running scan. Resolves `false` when nothing was running. */
+  cancelScan: () => invoke<boolean>("cancel_scan"),
+
+  // ----------------------------------------------------------- settings --
+
+  getSettings: () => invoke<Settings>("get_settings"),
+
+  /** FR-20: sweep default. `null` restores auto-detection. Validates the CIDR. */
+  setSubnet: (cidr: string | null) => invoke<Settings>("set_subnet", { cidr }),
 };
 
 /** True when the rejection is the Rust `{ code, message }` envelope. */

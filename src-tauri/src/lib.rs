@@ -7,10 +7,12 @@
 //!
 //! The SvelteKit frontend talks to it exclusively through Tauri commands and
 //! events. M1 ships the local-profile auth surface (`commands::auth`); M2 adds
-//! the Linkplay client, the per-device poller and manual device management.
-//! Discovery (M3), grouping (M4) and the Group Guard (M5) follow.
+//! the Linkplay client, the per-device poller and manual device management; M3
+//! adds discovery (`discovery`, `commands::scan`). Grouping (M4) and the Group
+//! Guard (M5) follow.
 
 pub mod commands;
+pub mod discovery;
 pub mod error;
 pub mod linkplay;
 pub mod net;
@@ -63,6 +65,10 @@ pub fn run() {
             commands::devices::get_status,
             commands::devices::refresh_device,
             commands::devices::local_address,
+            commands::scan::scan,
+            commands::scan::cancel_scan,
+            commands::settings::get_settings,
+            commands::settings::set_subnet,
         ])
         .run(tauri::generate_context!())
         .expect("error while running MusicSync");

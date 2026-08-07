@@ -1,5 +1,10 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { DeviceSnapshot } from "$lib/types";
+import type {
+  DeviceCandidate,
+  DeviceSnapshot,
+  ScanComplete,
+  ScanProgress,
+} from "$lib/types";
 
 /**
  * Typed wrappers over the Rust event stream (brief.md §7). Same rule as
@@ -27,4 +32,34 @@ export function onDeviceOffline(
   handler: (snapshot: DeviceSnapshot) => void
 ): Promise<UnlistenFn> {
   return listen<DeviceSnapshot>("device-offline", (event) => handler(event.payload));
+}
+
+/**
+ * Discovery progress (FR-4), throttled to ≤10 Hz on the Rust side. `phase` says
+ * which strategy the counters belong to — the three run concurrently, so events
+ * from different phases interleave.
+ */
+export function onScanProgress(
+  handler: (progress: ScanProgress) => void
+): Promise<UnlistenFn> {
+  return listen<ScanProgress>("scan-progress", (event) => handler(event.payload));
+}
+
+/**
+ * A candidate that answered `getStatusEx`, emitted live rather than batched at
+ * the end — a sweep takes seconds and the user should see results filling in.
+ */
+export function onScanDeviceFound(
+  handler: (candidate: DeviceCandidate) => void
+): Promise<UnlistenFn> {
+  return listen<{ candidate: DeviceCandidate }>("scan-device-found", (event) =>
+    handler(event.payload.candidate)
+  );
+}
+
+/** The scan ended. `cancelled` distinguishes "nothing found" from "stopped". */
+export function onScanComplete(
+  handler: (result: ScanComplete) => void
+): Promise<UnlistenFn> {
+  return listen<ScanComplete>("scan-complete", (event) => handler(event.payload));
 }

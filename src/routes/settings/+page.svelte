@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { session } from "$lib/stores/session.svelte";
-  import { errorMessage } from "$lib/tauri/commands";
+  import { commands, errorMessage } from "$lib/tauri/commands";
 
-  // FR-3: change/remove the local password. The rest of Settings (polling,
-  // subnet, theme, Group Guard — FR-20/FR-27) lands with M6.
+  // FR-3: change/remove the local password, plus FR-20's scan subnet (the one
+  // preference M3 needs). Polling interval, theme and Group Guard land with M6.
 
   let current = $state("");
   let next = $state("");
@@ -19,6 +20,48 @@
   let removeError = $state("");
 
   let rememberBusy = $state(false);
+
+  // ------------------------------------------------- network (FR-4 / FR-20) --
+
+  let subnet = $state("");
+  let subnetBusy = $state(false);
+  let subnetError = $state("");
+  let subnetDone = $state("");
+  /** This machine's LAN address — what auto-detection would pick. */
+  let autoCidr = $state("");
+
+  onMount(async () => {
+    try {
+      subnet = (await commands.getSettings()).subnet ?? "";
+    } catch (e) {
+      subnetError = errorMessage(e, "Could not read your settings.");
+    }
+    try {
+      const local = await commands.localAddress();
+      autoCidr = local ? `${local.split(".").slice(0, 3).join(".")}.0/24` : "";
+    } catch {
+      autoCidr = "";
+    }
+  });
+
+  async function saveSubnet(event: SubmitEvent) {
+    event.preventDefault();
+    subnetError = "";
+    subnetDone = "";
+    subnetBusy = true;
+    try {
+      // Empty means "go back to auto-detection"; the Rust side validates the
+      // rest (including the /16 width cap) so the two can't disagree.
+      const value = subnet.trim();
+      const saved = await commands.setSubnet(value === "" ? null : value);
+      subnet = saved.subnet ?? "";
+      subnetDone = saved.subnet ? `Scans will sweep ${saved.subnet}.` : "Back to auto-detection.";
+    } catch (e) {
+      subnetError = errorMessage(e, "Could not save that range.");
+    } finally {
+      subnetBusy = false;
+    }
+  }
 
   async function changePassword(event: SubmitEvent) {
     event.preventDefault();
@@ -86,9 +129,46 @@
   <div>
     <h1 class="text-2xl font-semibold text-white">Settings</h1>
     <p class="mt-1 text-sm text-slate-400">
-      Polling, subnet, theme and Group Guard options arrive with later milestones.
+      Polling, theme and Group Guard options arrive with later milestones.
     </p>
   </div>
+
+  <!-- FR-20: the default range for the discovery sweep (FR-4). -->
+  <section
+    class="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-6"
+  >
+    <h2 class="text-sm font-medium text-slate-200">Network</h2>
+    <p class="mt-1 text-sm text-slate-500">
+      Which range "Scan network" sweeps when you don't override it on the Devices page.
+      Leave it empty to detect it from this computer's address{#if autoCidr}
+        (<span class="font-mono text-slate-400">{autoCidr}</span>){/if}.
+    </p>
+
+    <form onsubmit={saveSubnet} class="mt-4 flex flex-wrap items-start gap-2">
+      <input
+        bind:value={subnet}
+        placeholder={autoCidr || "192.168.1.0/24"}
+        autocomplete="off"
+        spellcheck="false"
+        class="{field} w-56 font-mono"
+      />
+      <button
+        type="submit"
+        disabled={subnetBusy}
+        class="rounded-md bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-slate-900 transition-opacity hover:opacity-90 disabled:opacity-50"
+      >
+        {subnetBusy ? "Saving…" : "Save"}
+      </button>
+    </form>
+
+    {#if subnetError}
+      <p class="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{subnetError}</p>
+    {:else if subnetDone}
+      <p class="mt-3 rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">
+        {subnetDone}
+      </p>
+    {/if}
+  </section>
 
   <section
     class="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-6"
