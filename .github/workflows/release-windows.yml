@@ -1,0 +1,72 @@
+# Windows release — NSIS installer + updater artifact, published to R2.
+#
+# Manually triggered (Actions → release-windows → Run workflow) because a
+# release is a deliberate act. The rule is:
+#   bump the version (src-tauri/tauri.conf.json + package.json +
+#   src-tauri/Cargo.toml) → run ./scripts/build_release.sh on the Mac →
+#   PUSH the bump → run this workflow, on the SAME version.
+# The updater manifest has ONE global version: a lagging platform would see an
+# update it cannot satisfy and re-offer it after every install, and a CI run
+# from an un-pushed checkout would try to downgrade the manifest (merge_manifest.py
+# refuses and fails the job). See docs/RELEASING.md.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   TAURI_SIGNING_PRIVATE_KEY           contents of ~/.tauri/musicsync.key
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  musicsync
+#   R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY   the house `r2` token (storage bucket)
+name: release-windows
+
+on:
+  workflow_dispatch:
+
+env:
+  R2_ENDPOINT: https://d76960bd74940e6213de6aa16f3e04fd.r2.cloudflarestorage.com
+  R2_BUCKET: storage/music_sync
+  MUSIC_SYNC_BUCKET: https://pub-7b3e5bbd605d43adbeb4601a962d84bd.r2.dev/music_sync
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      # No `version:` — pnpm is pinned by package.json "packageManager".
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Stale-bundle purge: rust-cache restores target/, and the bundle dir
+      # rides along. A leftover installer from an older version would otherwise
+      # be a publishable artifact (see publish_windows.sh) — clear it so the
+      # build must produce one.
+      - name: Clear stale bundles
+        run: rm -rf src-tauri/target/release/bundle
+
+      - name: Build Tauri app (NSIS + updater signature)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build --bundles nsis
+
+      - name: Publish to R2 (fixed names, merge manifest key)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: bash scripts/publish_windows.sh

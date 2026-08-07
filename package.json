@@ -1,0 +1,43 @@
+{
+  "name": "music-sync",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MusicSync — Arylic LP10 LAN multiroom controller",
+  "packageManager": "pnpm@10.30.3",
+  "engines": {
+    "node": ">=20.16.0"
+  },
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "release:mac": "./scripts/build_release.sh"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.2",
+    "@tauri-apps/plugin-notification": "^2.3.3",
+    "@tauri-apps/plugin-opener": "^2.5.4",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-store": "^2.4.4",
+    "@tauri-apps/plugin-updater": "^2.10.1"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.22.0",
+    "@sveltejs/vite-plugin-svelte": "^5.1.0",
+    "@tailwindcss/vite": "^4.1.18",
+    "@tauri-apps/cli": "^2.11.4",
+    "svelte": "^5.38.0",
+    "svelte-check": "^4.3.0",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.9.2",
+    "vite": "^6.3.5"
+  }
+}

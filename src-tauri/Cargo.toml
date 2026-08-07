@@ -1,0 +1,47 @@
+[package]
+name = "music-sync"
+version = "0.1.0"
+description = "MusicSync — Arylic LP10 LAN multiroom controller"
+authors = ["MusicSync"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+# `_lib` suffix keeps the lib name distinct from the bin (Windows linker issue).
+name = "music_sync_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5", features = [] }
+
+[dependencies]
+tauri = { version = "2.10", features = ["devtools"] }
+tauri-plugin-updater = "2.10"
+tauri-plugin-store = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-process = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-log = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "net"] }
+futures-util = "0.3"
+
+# Linkplay HTTP API client (plain http:// on the LAN — no TLS backend needed).
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+
+# Discovery: mDNS browse + subnet sweep over the local interfaces.
+mdns-sd = "0.11"
+ipnet = "2"
+if-addrs = "0.13"
+
+# Local profile auth (FR-1): Argon2 password hash, no cloud account server.
+argon2 = "0.5"
+rand = "0.8"
+
+log = "0.4"

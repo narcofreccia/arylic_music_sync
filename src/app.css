@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* MusicSync is a dark-first LAN controller — the shell never flashes light. */
+@theme {
+  --color-surface: #0b0d10;
+  --color-surface-raised: #14181d;
+  --color-border-subtle: #232a32;
+  --color-accent: #38bdf8;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+  background-color: var(--color-surface);
+  color: #e6edf3;
+}
