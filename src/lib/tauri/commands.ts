@@ -9,6 +9,7 @@ import type {
   ScanOptions,
   Settings,
   SettingsPatch,
+  SpotifyState,
 } from "$lib/types";
 
 /**
@@ -109,6 +110,29 @@ export const commands = {
    * merged settings, or `null` if the open dialog was cancelled.
    */
   importConfigFile: () => invoke<Settings | null>("import_config_file"),
+
+  // ------------------------------------------------------------ spotify (S3) --
+
+  /**
+   * Start advertising the "MusicSync" Spotify Connect endpoint. The user then
+   * picks MusicSync in their Spotify app (Premium) to begin streaming.
+   */
+  spotifyStart: () => invoke<SpotifyState>("spotify_start"),
+
+  /** Stop advertising and tear down the capture session. Idempotent. */
+  spotifyStop: () => invoke<SpotifyState>("spotify_stop"),
+
+  /** Current capture state (running / connected / now-playing). */
+  spotifyStatus: () => invoke<SpotifyState>("spotify_status"),
+
+  /** Transport, proxied to the Connect session. */
+  spotifyPlay: () => invoke<void>("spotify_play"),
+  spotifyPause: () => invoke<void>("spotify_pause"),
+  spotifyNext: () => invoke<void>("spotify_next"),
+  spotifyPrev: () => invoke<void>("spotify_prev"),
+
+  /** Set Connect volume from a 0.0..=1.0 level. */
+  spotifySetVolume: (level: number) => invoke<void>("spotify_set_volume", { level }),
 };
 
 /** True when the rejection is the Rust `{ code, message }` envelope. */

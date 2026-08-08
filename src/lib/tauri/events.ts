@@ -4,6 +4,7 @@ import type {
   DeviceSnapshot,
   ScanComplete,
   ScanProgress,
+  SpotifyState,
 } from "$lib/types";
 
 /**
@@ -62,4 +63,14 @@ export function onScanComplete(
   handler: (result: ScanComplete) => void
 ): Promise<UnlistenFn> {
   return listen<ScanComplete>("scan-complete", (event) => handler(event.payload));
+}
+
+/**
+ * Spotify capture state (S3): emitted whenever the endpoint connects/disconnects,
+ * the track changes, or play/pause/volume moves. The full state is sent each time.
+ */
+export function onSpotifyState(
+  handler: (state: SpotifyState) => void
+): Promise<UnlistenFn> {
+  return listen<SpotifyState>("spotify-state", (event) => handler(event.payload));
 }

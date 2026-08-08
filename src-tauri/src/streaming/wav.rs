@@ -24,6 +24,11 @@ pub fn load_source(source: &StreamSource) -> Result<Vec<u8>, String> {
         StreamSource::Tone { freq_hz, duration_ms } => {
             Ok(sine_tone(*freq_hz, *duration_ms))
         }
+        // The live Spotify source has no static buffer — it is streamed through the
+        // engine's `start_live` path from the `PcmFanout`, never loaded here.
+        StreamSource::Spotify => {
+            Err("Spotify is a live source; use StreamEngine::start_live".into())
+        }
     }
 }
 

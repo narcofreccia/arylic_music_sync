@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use crate::discovery::ScanControl;
 use crate::poller::Poller;
+use crate::spotify::SpotifyManager;
 use crate::store::Config;
 use crate::streaming::StreamEngine;
 
@@ -73,6 +74,9 @@ pub struct AppState {
     /// The RAOP multi-sender / synchronization core (Phase S2). Holds at most one
     /// active streaming session (N `cliraop` children off a shared NTP anchor).
     pub streaming: StreamEngine,
+    /// The Spotify Connect capture endpoint (Phase S3). Advertises "MusicSync",
+    /// decodes to PCM via librespot, and feeds the streaming engine's live tee.
+    pub spotify: SpotifyManager,
 }
 
 impl AppState {
@@ -84,6 +88,7 @@ impl AppState {
             poller: Poller::default(),
             scan: ScanControl::default(),
             streaming: StreamEngine::default(),
+            spotify: SpotifyManager::default(),
         }
     }
 

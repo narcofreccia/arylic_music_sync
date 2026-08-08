@@ -18,6 +18,7 @@ pub mod error;
 pub mod luci;
 pub mod net;
 pub mod poller;
+pub mod spotify;
 pub mod state;
 pub mod store;
 pub mod streaming;
@@ -56,6 +57,10 @@ pub fn run() {
             // Let the streaming engine (S2) emit `stream-state` events to the UI.
             app.state::<AppState>()
                 .streaming
+                .set_app_handle(app.handle().clone());
+            // Let the Spotify manager (S3) emit `spotify-state` events to the UI.
+            app.state::<AppState>()
+                .spotify
                 .set_app_handle(app.handle().clone());
             // FR-6: re-poll the known devices from launch, so the list already
             // shows real online/offline state by the time the user gets past
@@ -96,6 +101,14 @@ pub fn run() {
             commands::streaming::stream_set_device_volume,
             commands::streaming::stream_set_device_delay,
             commands::streaming::stream_status,
+            commands::spotify::spotify_start,
+            commands::spotify::spotify_stop,
+            commands::spotify::spotify_status,
+            commands::spotify::spotify_play,
+            commands::spotify::spotify_pause,
+            commands::spotify::spotify_next,
+            commands::spotify::spotify_prev,
+            commands::spotify::spotify_set_volume,
         ])
         .run(tauri::generate_context!())
         .expect("error while running MusicSync");

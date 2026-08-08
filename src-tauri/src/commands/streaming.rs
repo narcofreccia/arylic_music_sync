@@ -13,21 +13,40 @@ use crate::state::AppState;
 use crate::streaming::model::{StreamSource, StreamStatus, StreamTarget};
 
 /// Start streaming `source` to every target in sync.
+///
+/// The `Spotify` source is live (Phase S3): its PCM is teed from the running
+/// Spotify capture's fan-out via the engine's `start_live` path rather than loaded
+/// from a file. Every other source is the S2 static path.
 #[tauri::command]
 pub async fn stream_start(
     app: AppHandle,
     targets: Vec<StreamTarget>,
     source: StreamSource,
 ) -> AppResult<StreamStatus> {
-    let engine = &app.state::<AppState>().streaming;
+    let state = app.state::<AppState>();
+    let engine = &state.streaming;
     let bin = engine.resolve_binary().ok_or_else(|| {
         AppError::Internal(
             "cliraop sender binary not found (run scripts/fetch_cliraop.sh)".into(),
         )
     })?;
-    engine
-        .start(bin, targets, source, None, None)
-        .map_err(AppError::Device)
+    match source {
+        StreamSource::Spotify => {
+            if !state.spotify.is_running() {
+                return Err(AppError::Device(
+                    "start Spotify capture first (spotify_start), then pick MusicSync in Spotify"
+                        .into(),
+                ));
+            }
+            let fanout = state.spotify.fanout();
+            engine
+                .start_live(bin, targets, fanout, None, None)
+                .map_err(AppError::Device)
+        }
+        other => engine
+            .start(bin, targets, other, None, None)
+            .map_err(AppError::Device),
+    }
 }
 
 /// Stop the active stream (kills every child). Idempotent.

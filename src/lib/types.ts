@@ -161,3 +161,35 @@ export interface Settings {
 export type SettingsPatch = Partial<
   Pick<Settings, "poll_ms" | "theme" | "http_timeout_ms" | "start_at_login">
 >;
+
+// ------------------------------------------------------------- streaming (S3) --
+
+/** Coarse transport state of the connected Spotify session (`PlayState` in Rust). */
+export type PlayState = "stopped" | "playing" | "paused";
+
+/** Now-playing metadata, mapped from librespot (`TrackMeta` in Rust). */
+export interface SpotifyTrack {
+  title: string;
+  artist: string;
+  album: string;
+  /** URL of the largest available cover image, if any. */
+  art_url: string | null;
+  duration_ms: number;
+}
+
+/**
+ * Whole-endpoint Spotify capture state (S3). Returned by `spotify_*` commands and
+ * pushed on the `spotify-state` event.
+ */
+export interface SpotifyState {
+  /** The "MusicSync" Connect endpoint is advertising over zeroconf. */
+  running: boolean;
+  /** A Spotify client has taken over this endpoint. */
+  connected: boolean;
+  play_state: PlayState;
+  track: SpotifyTrack | null;
+  position_ms: number;
+  /** Connect volume on Spotify's 16-bit scale (0..=65535). */
+  volume: number;
+  device_name: string;
+}

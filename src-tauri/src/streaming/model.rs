@@ -55,6 +55,10 @@ pub enum StreamSource {
     RawPcm { path: String },
     /// A generated sine test tone (used by the sync-measurement example).
     Tone { freq_hz: u32, duration_ms: u32 },
+    /// The live librespot capture (Phase S3): PCM is not loaded from a file but
+    /// teed in real time from the Spotify manager's [`PcmFanout`](crate::streaming::live::PcmFanout).
+    /// Carries no data — the engine pulls the fan-out from `AppState` at start.
+    Spotify,
 }
 
 impl StreamSource {
@@ -66,6 +70,7 @@ impl StreamSource {
             StreamSource::Tone { freq_hz, duration_ms } => {
                 format!("tone:{freq_hz}Hz/{duration_ms}ms")
             }
+            StreamSource::Spotify => "spotify".to_string(),
         }
     }
 }

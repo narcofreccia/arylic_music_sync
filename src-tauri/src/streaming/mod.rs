@@ -14,6 +14,7 @@
 //! * [`engine`] — the orchestrator: anchor once, spawn N, tee PCM with per-device DSP.
 
 pub mod engine;
+pub mod live;
 pub mod model;
 pub mod sidecar;
 pub mod sync;

@@ -49,3 +49,26 @@ argon2 = "0.5"
 rand = "0.8"
 
 log = "0.4"
+
+# --- Phase S3: Spotify capture via librespot (in-process Connect endpoint) ---
+# BUILD PIN (see docs/STREAMING-design.md §7): librespot-core 0.8.0's build script
+# uses `vergen-gitcl 1.0.8`, which pulls BOTH `vergen 9.1.0` (→ vergen-lib 9.1.0)
+# and `vergen-lib 0.1.6` directly, so its build.rs fails to compile with an E0277
+# trait-mismatch on Rust 1.93. Fix: pin `vergen` to 9.0.6 (the last release still on
+# vergen-lib 0.1.x), which collapses the graph to a single vergen-lib 0.1.6. The pin
+# lives in Cargo.lock (applied via `cargo update -p vergen --precise 9.0.6`); do NOT
+# run `cargo update -p vergen` past 9.0.x or the build blocker returns.
+
+# librespot is an unofficial, reverse-engineered Spotify client (Spotify ToS gray
+# area) and requires a Spotify **Premium** account. We embed it in-process and feed
+# decoded PCM to the S2 streaming engine via a custom audio-backend Sink (see
+# src/spotify/). `default-features = false` drops native-tls + the rodio audio
+# backend (we never play to a local device); we select rustls to match the app's
+# existing rustls/ring TLS stack, and libmdns for pure-Rust zeroconf advertising.
+librespot-core = { version = "0.8", default-features = false, features = ["rustls-tls-webpki-roots"] }
+librespot-discovery = { version = "0.8", default-features = false, features = ["rustls-tls-webpki-roots", "with-libmdns"] }
+librespot-connect = { version = "0.8", default-features = false, features = ["rustls-tls-webpki-roots"] }
+librespot-metadata = { version = "0.8", default-features = false, features = ["rustls-tls-webpki-roots"] }
+librespot-playback = { version = "0.8", default-features = false, features = ["rustls-tls-webpki-roots"] }
+# Poll the librespot zeroconf discovery Stream (yields Spotify Credentials).
+futures-util = { version = "0.3", default-features = false }

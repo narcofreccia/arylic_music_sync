@@ -16,11 +16,14 @@
 use std::path::PathBuf;
 use std::process::ChildStdin;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 use tauri::{AppHandle, Emitter};
 
+use super::live::{PcmFanout, PcmPacket, DEFAULT_CAPACITY};
 use super::model::{
     ms_to_frames, DeviceStatus, StreamSource, StreamStatus, StreamTarget, DEFAULT_LATENCY_FRAMES,
     DEFAULT_WAIT_MS,
@@ -28,6 +31,15 @@ use super::model::{
 use super::sidecar::{capture_ntp_anchor, resolve_cliraop, RaopChild};
 use super::sync::{scale_s16le, silence_frames, FrameChunks};
 use super::wav::load_source;
+
+/// The PCM a device writer pulls from: a whole static buffer (S2 file/tone) or a
+/// live per-device receiver fed by the [`PcmFanout`] (S3 Spotify capture).
+enum ChunkFeed {
+    /// The shared static buffer; the writer iterates it once and exits at EOF.
+    Static(Arc<Vec<u8>>),
+    /// A live tee receiver; the writer pumps packets until stopped or disconnected.
+    Live(Receiver<PcmPacket>),
+}
 
 /// Frames per stdin write. 4096 frames ≈ 93 ms of audio (16 KB); big enough to
 /// keep syscall overhead low, small enough that a live volume change lands
@@ -197,6 +209,9 @@ impl StreamEngine {
     /// NTP anchor once → spawn one child per target with the shared anchor +
     /// matched latency/wait → launch one writer thread per child. Returns the
     /// resulting [`StreamStatus`].
+    ///
+    /// This is the S2 *static* path (WAV/RAW/tone). The live Spotify capture uses
+    /// [`start_live`](Self::start_live), which shares the same child-spawn core.
     pub fn start(
         &self,
         bin: PathBuf,
@@ -204,6 +219,51 @@ impl StreamEngine {
         source: StreamSource,
         latency_frames: Option<u32>,
         wait_ms: Option<u32>,
+    ) -> Result<StreamStatus, String> {
+        // Load the whole PCM source once; every child is teed the same Arc.
+        let pcm = Arc::new(load_source(&source)?);
+        if pcm.is_empty() {
+            return Err("PCM source is empty".into());
+        }
+        self.start_internal(bin, targets, source.label(), latency_frames, wait_ms, || {
+            ChunkFeed::Static(pcm.clone())
+        })
+    }
+
+    /// Start streaming the **live** librespot capture (Phase S3) to every `target`.
+    ///
+    /// Identical to [`start`](Self::start) — shared NTP anchor, matched latency,
+    /// one child per receiver, per-device software volume/delay — except the PCM
+    /// is teed in real time from `fanout` (fed by the Spotify [`RingSink`]) instead
+    /// of a preloaded buffer. Each child gets its own fan-out subscription, so the
+    /// decode thread never blocks and a stalled receiver drops only its own frames.
+    pub fn start_live(
+        &self,
+        bin: PathBuf,
+        targets: Vec<StreamTarget>,
+        fanout: Arc<PcmFanout>,
+        latency_frames: Option<u32>,
+        wait_ms: Option<u32>,
+    ) -> Result<StreamStatus, String> {
+        // Drop any stale subscribers from a previous session before we re-subscribe.
+        fanout.clear();
+        self.start_internal(bin, targets, "spotify".to_string(), latency_frames, wait_ms, || {
+            ChunkFeed::Live(fanout.subscribe(DEFAULT_CAPACITY))
+        })
+    }
+
+    /// Shared start core: capture the anchor once, spawn one child per target, and
+    /// launch a writer per child whose PCM feed comes from `make_feed` (a static
+    /// buffer for S2, a live fan-out subscription for S3). `make_feed` is called
+    /// once per target, in order.
+    fn start_internal(
+        &self,
+        bin: PathBuf,
+        targets: Vec<StreamTarget>,
+        source_label: String,
+        latency_frames: Option<u32>,
+        wait_ms: Option<u32>,
+        mut make_feed: impl FnMut() -> ChunkFeed,
     ) -> Result<StreamStatus, String> {
         if targets.is_empty() {
             return Err("no stream targets given".into());
@@ -216,12 +276,6 @@ impl StreamEngine {
         let latency_frames = latency_frames.unwrap_or(DEFAULT_LATENCY_FRAMES);
         let wait_ms = wait_ms.unwrap_or(DEFAULT_WAIT_MS);
 
-        // Load the whole PCM source once; every child is teed the same Arc.
-        let pcm = Arc::new(load_source(&source)?);
-        if pcm.is_empty() {
-            return Err("PCM source is empty".into());
-        }
-
         // Capture the shared master clock ONCE.
         let anchor_file = std::env::temp_dir().join(format!(
             "musicsync-anchor-{}.ntp",
@@ -229,7 +283,7 @@ impl StreamEngine {
         ));
         let anchor_ntp = capture_ntp_anchor(&bin, &anchor_file)?;
         log::info!(
-            "stream: captured NTP anchor {anchor_ntp} for {} target(s), latency={latency_frames}f wait={wait_ms}ms",
+            "stream: captured NTP anchor {anchor_ntp} for {} target(s), latency={latency_frames}f wait={wait_ms}ms source={source_label}",
             targets.len()
         );
 
@@ -256,7 +310,13 @@ impl StreamEngine {
             let stdin = child.take_stdin();
 
             if let Some(stdin) = stdin {
-                let writer = spawn_writer(stdin, pcm.clone(), ctl.clone(), stop.clone(), child.label().to_string());
+                let writer = spawn_writer(
+                    stdin,
+                    make_feed(),
+                    ctl.clone(),
+                    stop.clone(),
+                    child.label().to_string(),
+                );
                 writers.push(writer);
             } else {
                 log::warn!("child {} had no stdin; skipping its writer", child.label());
@@ -266,7 +326,7 @@ impl StreamEngine {
         }
 
         let mut active = ActiveStream {
-            source_label: source.label(),
+            source_label,
             anchor_ntp,
             anchor_file,
             latency_frames,
@@ -351,10 +411,12 @@ impl StreamEngine {
 }
 
 /// Spawn the per-device writer thread: prepend this device's delay as silence,
-/// then stream the shared PCM in frame-aligned chunks, applying live volume.
+/// then stream PCM to the child's stdin applying live volume. The feed is either a
+/// static buffer (S2) or a live fan-out receiver (S3); the delay lead-in and
+/// per-chunk volume scaling are identical for both.
 fn spawn_writer(
     mut stdin: ChildStdin,
-    pcm: Arc<Vec<u8>>,
+    feed: ChunkFeed,
     ctl: Arc<DeviceControl>,
     stop: Arc<AtomicBool>,
     label: String,
@@ -375,28 +437,59 @@ fn spawn_writer(
             }
         }
 
-        // Stream the real audio. The OS pipe back-pressures here — cliraop reads
-        // at real time off the shared NTP — so this loop self-paces per device.
-        for chunk in FrameChunks::new(&pcm, CHUNK_FRAMES) {
-            if stop.load(Ordering::Acquire) {
-                break;
-            }
-            let gain = ctl.gain();
-            if gain == 1.0 {
-                if stdin.write_all(chunk).is_err() {
-                    break;
-                }
-            } else {
-                let mut buf = chunk.to_vec();
-                scale_s16le(&mut buf, gain);
-                if stdin.write_all(&buf).is_err() {
-                    break;
+        match feed {
+            // S2: stream the whole buffer once. The OS pipe back-pressures here —
+            // cliraop reads at real time off the shared NTP — so it self-paces.
+            ChunkFeed::Static(pcm) => {
+                for chunk in FrameChunks::new(&pcm, CHUNK_FRAMES) {
+                    if stop.load(Ordering::Acquire) {
+                        break;
+                    }
+                    if !write_chunk(&mut stdin, chunk, &ctl) {
+                        break;
+                    }
                 }
             }
-            ctl.add_frames((chunk.len() / super::model::BYTES_PER_FRAME) as u64);
+            // S3: pump live packets until stopped or the producer disconnects. A
+            // short recv timeout lets the stop flag be observed even while the
+            // Spotify stream is silent/paused (no packets arriving).
+            ChunkFeed::Live(rx) => loop {
+                if stop.load(Ordering::Acquire) {
+                    break;
+                }
+                match rx.recv_timeout(Duration::from_millis(200)) {
+                    Ok(packet) => {
+                        if !write_chunk(&mut stdin, &packet, &ctl) {
+                            break;
+                        }
+                    }
+                    Err(RecvTimeoutError::Timeout) => continue,
+                    Err(RecvTimeoutError::Disconnected) => break,
+                }
+            },
         }
+
         let _ = stdin.flush();
         log::debug!("writer for {label} finished ({} frames)", ctl.frames());
         // Dropping stdin here signals EOF so the child drains and exits cleanly.
     })
+}
+
+/// Write one PCM chunk to a child's stdin, applying the device's live volume.
+/// Returns `false` on a broken pipe (the writer should stop). Unity gain writes
+/// the shared bytes directly; any attenuation clones just this chunk to scale it.
+fn write_chunk(stdin: &mut ChildStdin, chunk: &[u8], ctl: &DeviceControl) -> bool {
+    use std::io::Write;
+    let gain = ctl.gain();
+    let ok = if gain == 1.0 {
+        stdin.write_all(chunk).is_ok()
+    } else {
+        let mut buf = chunk.to_vec();
+        scale_s16le(&mut buf, gain);
+        stdin.write_all(&buf).is_ok()
+    };
+    if ok {
+        ctl.add_frames((chunk.len() / super::model::BYTES_PER_FRAME) as u64);
+    }
+    ok
 }
