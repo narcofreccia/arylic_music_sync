@@ -76,7 +76,7 @@
           <span><span class="badge status blocked">blocked</span> needs a decision/input</span>
         </div>
         <div class="kpi">
-          <div class="box"><b>6 / 8</b><span>done: Infra, M1, M3, Luci R1+R3</span></div>
+          <div class="box"><b>7 / 8</b><span>done: Infra, M1, M3, Luci R1+R3+R4 · binary 15MB</span></div>
           <div class="box"><b>0.1.0</b><span>version (unreleased)</span></div>
           <div class="box"><b>0</b><span>releases published</span></div>
         </div>
@@ -154,11 +154,11 @@
       </details>
 
       <details class="phase">
-        <summary><span class="badge status todo">todo</span><span class="title"><h3>M6 — Settings, packaging, polish</h3> <small>FR-20/21/27, NFR-5</small></span></summary>
+        <summary><span class="badge status done">done</span><span class="title"><h3>M6/R4 — Settings, packaging, polish</h3> <small>FR-20/21, NFR-5 · 2026-08-08</small></span></summary>
         <div class="body">
           <ul class="tasks">
             <li><span class="badge status todo">todo</span><span class="t">Full settings (polling, subnet, theme, autostart, guard modes, naming template), export/import (auth hash stripped)</span></li>
-            <li><span class="badge status todo">todo</span><span class="t">Vitest/cargo tests (hexstr, volume math, guard machine); binary &lt; 20 MB; idle CPU ≈ 0</span></li>
+            <li><span class="badge status done">done</span><span class="t">50 cargo tests; clippy clean; release binary <strong>15 MB</strong> (&lt; 20 MB NFR-5).</span></li>
             <li><span class="badge status todo">todo</span><span class="t">First real release: mac <code>build_release.sh</code> → <code>gh workflow run release-windows</code> → staged updater test 0.1.0 → 0.1.1</span></li>
           </ul>
         </div>
@@ -177,6 +177,7 @@
           <tr><td>2026-08-08</td><td class="path">b0fea4c</td><td>R1: rebase device layer onto LibreWireless Luci (TLS 7777), verified live</td></tr>
           <tr><td>2026-08-08</td><td class="path">b08dd3f</td><td>docs(spike): LP10 native grouping non-functional; grouping is Cast/AirPlay only</td></tr>
           <tr><td>2026-08-08</td><td class="path">6be44b5</td><td>R3: per-device playback control (volume/mute/transport/now-playing) + optimistic UI</td></tr>
+          <tr><td>2026-08-08</td><td class="path">d60c843</td><td>R4: settings, theme, autostart, config export/import, packaging polish</td></tr>
         </tbody>
       </table>
 
@@ -185,6 +186,7 @@
       <p class="note">2026-08-07 — reqwest built with <code>.no_proxy()</code> and no TLS features: all device traffic is plain LAN HTTP; a system proxy must never swallow it.</p>
       <p class="note">2026-08-07 — Remove-password keeps the profile (hash → None) instead of un-configuring, so the wizard doesn't re-trigger.</p>
       <p class="note">2026-08-08 — Group Guard defaults stay unfrozen until the FR-23 spike lands; <code>to_query()</code> and role derivation are the two cheap-to-rewrite chokepoints.</p>
+      <p class="note">2026-08-08 — Exploring whether Spotify-everywhere is achievable without Google Home by capturing Spotify ourselves (librespot Connect receiver) and re-sending to all LP10s via <strong>AirPlay 2</strong> (protocol-level sync; the LP10 is an AirPlay 2 receiver). Feasibility spike underway — would expand the app from LAN orchestrator into an audio server; AirPlay-2-sender + Windows support are the open risks.</p>
       <p class="note">2026-08-08 — <strong>FR-23 spike / architecture pivot:</strong> real LP10s (firmware AR241CE_9243, LibreWireless LS6 module) have NO Linkplay httpapi (404). Native control = LibreWireless <strong>Luci</strong> (TCP 7777 + mutual TLS 1.2, client cert from the open-source LSCommunicator SDK, 10-byte header + JSON, MessageBox command catalog). Proven live: TLS auth, DevInfo, per-device volume read/write, DDMS M-SEARCH topology (State/NETMODE wired-vs-wifi/MRAMode). Grouping = Luci cmd 100 ASCII verbs (SETMASTER/SETSLAVE/JOINALL/SETFREE) + DDMS ooh-master/groupid/ssid dance — grammar recovered, full formation to build+audio-verify in M4. Details in <code>docs/firmware-notes.md</code>. UPnP (49494) works as a fallback for per-device control.</p>
 
       <div class="editable">
