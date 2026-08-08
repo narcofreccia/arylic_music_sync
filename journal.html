@@ -60,7 +60,7 @@
         <h1>MusicSync — Project Journal</h1>
         <div class="sub">
           Arylic LP10 LAN multiroom controller — Tauri v2 + SvelteKit (Svelte 5) + Rust, Linkplay HTTP API.
-          &nbsp;·&nbsp; Last updated: <strong>2026-08-08</strong> &nbsp;·&nbsp; Current: <span class="pill">Luci pivot underway. <strong>R1 done</strong> — device layer rebased onto Luci (TLS 7777), verified live reading both LP10s. Next: <strong>R2 grouping + group-management UI</strong>.</span>
+          &nbsp;·&nbsp; Last updated: <strong>2026-08-08</strong> &nbsp;·&nbsp; Current: <span class="pill">Luci pivot: <strong>R1 (device layer) + R3 (per-device control) done</strong>, verified live (volume/mute) on both LP10s. <strong>Grouping BLOCKED</strong>: native DDMS is a no-op on LP10, local Cast group creation not feasible, Spotify sync needs a cloud Cast group — decision parked until on-site. UPnP transport/now-playing pending live check. R4 (settings/polish) buildable next.</span>
         </div>
         <div class="howto">
           <strong>How to use.</strong> Living source of truth for progress &amp; focus (referenced from <code>CLAUDE.md</code>).
@@ -76,7 +76,7 @@
           <span><span class="badge status blocked">blocked</span> needs a decision/input</span>
         </div>
         <div class="kpi">
-          <div class="box"><b>5 / 8</b><span>done: Infra, M1, M3, Luci-R1</span></div>
+          <div class="box"><b>6 / 8</b><span>done: Infra, M1, M3, Luci R1+R3</span></div>
           <div class="box"><b>0.1.0</b><span>version (unreleased)</span></div>
           <div class="box"><b>0</b><span>releases published</span></div>
         </div>
@@ -143,11 +143,11 @@
       </details>
 
       <details class="phase">
-        <summary><span class="badge status todo">todo</span><span class="title"><h3>M5 — Volume, transport, now playing, Group Guard</h3> <small>FR-15..19, FR-24..26</small></span></summary>
+        <summary><span class="badge status wip">wip</span><span class="title"><h3>M5/R3 — Volume, transport, now playing</h3> <small>FR-15..19 done; Group Guard N/A (no grouping)</small></span></summary>
         <div class="body">
           <ul class="tasks">
-            <li><span class="badge status todo">todo</span><span class="t">Optimistic volume (80 ms debounce, 1.2 s grace, rollback), proportional master slider, slave volume via master</span></li>
-            <li><span class="badge status todo">todo</span><span class="t">Group Guard state machine: ask/always/never, flapping suppression, 5 s settling window, master failover</span></li>
+            <li><span class="badge status done">done</span><span class="t">Optimistic volume (debounce+grace+rollback+toasts) via Luci fire-and-forget; mute; transport+now-playing via UPnP AVTransport (Luci PLAYCNTRL is a no-op). Volume/mute verified live; UPnP path pending on-site.</span></li>
+            <li><span class="badge status blocked">blocked</span><span class="t">Group Guard — N/A: LP10 has no native grouping (see decisions). Revisit only if a grouping path is unlocked on-site.</span></li>
             <li><span class="badge status todo">todo</span><span class="t">Adaptive polling (2 s focused+grouped → 8 s blurred idle); Spotify Connect hint on dashboard</span></li>
           </ul>
         </div>
@@ -175,6 +175,8 @@
           <tr><td>2026-08-08</td><td class="path">0dbc8c8</td><td>M3: network discovery — mDNS + SSDP + subnet sweep with confirm-by-getStatusEx</td></tr>
           <tr><td>2026-08-08</td><td class="path">993cec0</td><td>docs(spike): FR-23 — LP10 uses LibreWireless Luci, DDMS grouping grammar</td></tr>
           <tr><td>2026-08-08</td><td class="path">b0fea4c</td><td>R1: rebase device layer onto LibreWireless Luci (TLS 7777), verified live</td></tr>
+          <tr><td>2026-08-08</td><td class="path">b08dd3f</td><td>docs(spike): LP10 native grouping non-functional; grouping is Cast/AirPlay only</td></tr>
+          <tr><td>2026-08-08</td><td class="path">6be44b5</td><td>R3: per-device playback control (volume/mute/transport/now-playing) + optimistic UI</td></tr>
         </tbody>
       </table>
 
