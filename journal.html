@@ -76,7 +76,7 @@
           <span><span class="badge status blocked">blocked</span> needs a decision/input</span>
         </div>
         <div class="kpi">
-          <div class="box"><b>7 / 8</b><span>done: Infra, M1, M3, Luci R1+R3+R4 · binary 15MB</span></div>
+          <div class="box"><b>Streaming code-complete</b><span>S1-S3+S5 done; S4 = on-site hardware test</span></div>
           <div class="box"><b>0.1.0</b><span>version (unreleased)</span></div>
           <div class="box"><b>0</b><span>releases published</span></div>
         </div>
@@ -172,7 +172,7 @@
             <li><span class="badge status done">done</span><span class="t">S2: cliraop sidecar + streaming engine (shared-NTP anchor, PCM fan-out, per-device vol/delay). <strong>Validated sample-locked: 0.000ms inter-receiver lag / 0.000ms drift</strong> on local shairport-sync rig. 66 tests. Prebuilt binaries per platform via <code>scripts/fetch_cliraop.sh</code>.</span></li>
             <li><span class="badge status done">done</span><span class="t">S3: librespot Spotify Connect capture ("MusicSync", Premium) → RingSink PCM → live fan-out into the sync engine. vergen pinned. 77 tests. Binary 25.3MB. Home test: <code>examples/spotify_capture.rs</code> (pending user Premium run).</span></li>
             <li><span class="badge status blocked">blocked</span><span class="t">S4: real-hardware bring-up — LP10 accepts bare RAOP sender? latency/drift tuning. <em>Needs LP10s on-site.</em></span></li>
-            <li><span class="badge status wip">wip</span><span class="t">S5: "Play Everywhere" UI (pick speakers into stream group, master transport, per-room volume + delay).</span></li>
+            <li><span class="badge status done">done</span><span class="t">S5: "Play Everywhere" UI — Spotify capture panel (connect status, now-playing, master transport), speaker group picker, per-room volume+delay. Wired to S2/S3.</span></li>
           </ul>
           <p class="note">Turns the app from LAN controller into an audio server. Spotify ToS gray area (librespot). Per-device controller (R1/R3/R4) ships independently.</p>
         </div>
@@ -196,6 +196,7 @@
           <tr><td>2026-08-08</td><td class="path">2769b89</td><td>docs: streaming design + de-risk (RAOP multi-sync via cliraop sidecar)</td></tr>
           <tr><td>2026-08-08</td><td class="path">93c1aa6</td><td>S2: RAOP multi-sender + sync core — sample-locked (0ms lag) on local rig</td></tr>
           <tr><td>2026-08-08</td><td class="path">0f5a5f9</td><td>S3: Spotify capture via librespot -> PCM into the sync engine</td></tr>
+          <tr><td>2026-08-08</td><td class="path">038da6b</td><td>S5: Play Everywhere streaming UI</td></tr>
         </tbody>
       </table>
 
