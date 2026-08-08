@@ -58,6 +58,11 @@ jobs:
       - name: Clear stale bundles
         run: rm -rf src-tauri/target/release/bundle
 
+      # Fetch the prebuilt cliraop RAOP-sender sidecar (+ OpenSSL DLLs) for the
+      # Windows target, placed as the Tauri externalBin / bundled resources.
+      - name: Fetch cliraop sidecar (Windows)
+        run: bash scripts/fetch_cliraop.sh x86_64-pc-windows-msvc
+
       - name: Build Tauri app (NSIS + updater signature)
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

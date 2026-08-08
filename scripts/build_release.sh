@@ -168,6 +168,9 @@ fi
 if [[ $MANIFEST_ONLY -eq 0 ]]; then
   log "Building (frontend → Tauri bundle)"
   (cd "$ROOT" && pnpm install)
+  # Fetch the prebuilt cliraop RAOP-sender sidecar for this host (Tauri externalBin).
+  log "Fetching cliraop sidecar (host triple)"
+  (cd "$ROOT" && bash scripts/fetch_cliraop.sh)
   export TAURI_SIGNING_PRIVATE_KEY="$(cat "$KEY_FILE")"
   export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$KEY_PASSWORD"
   if [[ $SKIP_NOTARIZE -eq 1 ]]; then

@@ -1,0 +1,45 @@
+# Build-only CI validation — compiles the full app (librespot + streaming +
+# cliraop sidecar) on Windows and macOS and uploads the installer as a GitHub
+# artifact. Does NOT publish to R2 (that's release-windows.yml). Use this to
+# confirm cross-platform builds before cutting a real release.
+#
+# Manually triggered. Uses the signing secrets only so the updater-artifact step
+# (createUpdaterArtifacts) completes; nothing is uploaded to R2.
+name: ci-build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Fetch cliraop sidecar (Windows)
+        run: bash scripts/fetch_cliraop.sh x86_64-pc-windows-msvc
+      - name: Build Tauri app (NSIS)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build --bundles nsis
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: musicsync-windows-installer
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error

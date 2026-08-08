@@ -33,7 +33,8 @@ pub fn ms_to_frames(ms: u32) -> usize {
 /// One RAOP receiver we fan a copy of the PCM stream out to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamTarget {
-    /// Optional MusicSync device UUID (absent for the local test rig).
+    /// Optional MusicSync device UUID, or a manual-target id (absent for the raw
+    /// local test rig). Also the persistence key for this target's saved delay.
     #[serde(default)]
     pub uuid: Option<String>,
     /// Human label (also the shairport-sync `-a` name on the rig).
@@ -42,6 +43,18 @@ pub struct StreamTarget {
     pub ip: String,
     /// RAOP control port (`5000` for AirPlay 1; the rig uses distinct ports).
     pub raop_port: u16,
+    /// Initial per-device playback delay in ms (Feature 2). Populated from the
+    /// persisted store by `stream_start`; the frontend can omit it (defaults 0).
+    #[serde(default)]
+    pub delay_ms: u32,
+}
+
+impl StreamTarget {
+    /// The key this target's persisted delay is stored under: its UUID/manual-id
+    /// when present, else its IP. Mirrors [`crate::store::delay_key`].
+    pub fn delay_key(&self) -> String {
+        crate::store::delay_key(self.uuid.as_deref(), &self.ip)
+    }
 }
 
 /// Where the PCM being streamed comes from (S2 = a local file/tone; the live
@@ -81,6 +94,9 @@ pub struct DeviceStatus {
     pub ip: String,
     pub name: String,
     pub raop_port: u16,
+    /// Persistence key for this target's delay (device UUID / manual-id / IP), so
+    /// the RoomRow can drive `set_target_delay` with the right key.
+    pub key: String,
     /// Software volume gain in `0.0..=1.0`.
     pub volume: f32,
     /// Software delay applied ahead of this receiver's audio (ms).

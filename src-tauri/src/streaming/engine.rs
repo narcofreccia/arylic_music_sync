@@ -53,6 +53,8 @@ pub struct DeviceControl {
     pub ip: String,
     pub name: String,
     pub raop_port: u16,
+    /// Persistence key for this target's delay (device UUID / manual-id / IP).
+    pub key: String,
     /// Gain × 1000, so we can carry it in an atomic. `1000` = unity.
     gain_milli: AtomicU32,
     /// Per-device delay in ms (applied as silent lead-in frames).
@@ -67,8 +69,11 @@ impl DeviceControl {
             ip: target.ip.clone(),
             name: target.name.clone(),
             raop_port: target.raop_port,
+            key: target.delay_key(),
             gain_milli: AtomicU32::new(1000),
-            delay_ms: AtomicU32::new(0),
+            // Seed the delay from the target's persisted value (Feature 2). A
+            // default 0 keeps the seamless-sync path untouched.
+            delay_ms: AtomicU32::new(target.delay_ms),
             frames_written: AtomicU64::new(0),
         }
     }
@@ -120,6 +125,7 @@ impl ActiveStream {
                 ip: ctl.ip.clone(),
                 name: ctl.name.clone(),
                 raop_port: ctl.raop_port,
+                key: ctl.key.clone(),
                 volume: ctl.gain(),
                 delay_ms: ctl.delay_ms(),
                 alive: alive.get(i).copied().unwrap_or(false),
@@ -383,6 +389,25 @@ impl StreamEngine {
             .iter()
             .find(|c| c.ip == ip)
             .ok_or_else(|| format!("no target with ip {ip}"))?;
+        ctl.set_delay_ms(delay_ms);
+        let status = active.status();
+        drop(guard);
+        self.emit(&status);
+        Ok(status)
+    }
+
+    /// Set a receiver's software delay (ms) by its persistence key (Feature 2).
+    /// Same live semantics as [`set_device_delay`](Self::set_device_delay) — the
+    /// value is recorded and reflected in status; it shapes the lead-in on the
+    /// next start. Errors if no stream is active or the key is not in the group.
+    pub fn set_target_delay(&self, key: &str, delay_ms: u32) -> Result<StreamStatus, String> {
+        let mut guard = self.inner.lock().map_err(|e| e.to_string())?;
+        let active = guard.as_mut().ok_or("no active stream")?;
+        let ctl = active
+            .controls
+            .iter()
+            .find(|c| c.key == key)
+            .ok_or_else(|| format!("no target with key {key}"))?;
         ctl.set_delay_ms(delay_ms);
         let status = active.status();
         drop(guard);
