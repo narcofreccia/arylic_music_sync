@@ -20,6 +20,7 @@ pub mod net;
 pub mod poller;
 pub mod state;
 pub mod store;
+pub mod streaming;
 pub mod upnp;
 
 use tauri::Manager;
@@ -52,6 +53,10 @@ pub fn run() {
                 store::Config::default()
             });
             app.manage(AppState::new(config));
+            // Let the streaming engine (S2) emit `stream-state` events to the UI.
+            app.state::<AppState>()
+                .streaming
+                .set_app_handle(app.handle().clone());
             // FR-6: re-poll the known devices from launch, so the list already
             // shows real online/offline state by the time the user gets past
             // the login screen.
@@ -86,6 +91,11 @@ pub fn run() {
             commands::settings::import_config,
             commands::settings::export_config_file,
             commands::settings::import_config_file,
+            commands::streaming::stream_start,
+            commands::streaming::stream_stop,
+            commands::streaming::stream_set_device_volume,
+            commands::streaming::stream_set_device_delay,
+            commands::streaming::stream_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running MusicSync");

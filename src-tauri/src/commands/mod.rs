@@ -5,3 +5,4 @@ pub mod devices;
 pub mod playback;
 pub mod scan;
 pub mod settings;
+pub mod streaming;

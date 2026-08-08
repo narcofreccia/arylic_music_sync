@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 use crate::discovery::ScanControl;
 use crate::poller::Poller;
 use crate::store::Config;
+use crate::streaming::StreamEngine;
 
 /// Failed logins allowed before the cool-down kicks in.
 pub const MAX_FAILURES: u32 = 5;
@@ -69,6 +70,9 @@ pub struct AppState {
     pub poller: Poller,
     /// The one-scan-at-a-time slot (FR-4); holds the running scan's cancel token.
     pub scan: ScanControl,
+    /// The RAOP multi-sender / synchronization core (Phase S2). Holds at most one
+    /// active streaming session (N `cliraop` children off a shared NTP anchor).
+    pub streaming: StreamEngine,
 }
 
 impl AppState {
@@ -79,6 +83,7 @@ impl AppState {
             throttle: Mutex::new(LoginThrottle::default()),
             poller: Poller::default(),
             scan: ScanControl::default(),
+            streaming: StreamEngine::default(),
         }
     }
 
