@@ -181,6 +181,21 @@ impl LuciClient {
         self.request(mb.id(), MessageType::Write, payload).await
     }
 
+    /// WRITE without waiting for a correlated reply.
+    ///
+    /// LP10 firmware (`AR241CE_9243.16.2`) applies `VOLUME(64)` / `Mute_Unmute(63)`
+    /// writes but sends **no reply frame** for them (verified live: the value
+    /// takes effect, yet a `request` on cmd 64/63 always times out). Waiting would
+    /// stall every volume tick for the full `REQUEST_TIMEOUT`, so these go out
+    /// fire-and-forget — the poller confirms the new value a cycle later.
+    pub async fn write_oneway(&self, mb: MessageBox, payload: &str) -> AppResult<()> {
+        if self.inner.closed.load(Ordering::SeqCst) {
+            return Err(AppError::Device(format!("{} is disconnected.", self.inner.ip)));
+        }
+        let frame = codec::encode(mb.id(), MessageType::Write.id(), payload);
+        self.write_all(&frame).await
+    }
+
     async fn write_all(&self, bytes: &[u8]) -> AppResult<()> {
         let mut write = self.inner.write.lock().await;
         write

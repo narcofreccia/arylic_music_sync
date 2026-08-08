@@ -32,6 +32,9 @@ export interface SavedDevice {
 /** Group role, read from the DDMS `State` banner. R2 acts on it; R1 shows it. */
 export type Role = "solo" | "master" | "slave";
 
+/** Transport verbs accepted by `player_cmd` (R3). */
+export type PlayerCmd = "play" | "pause" | "next" | "prev" | "stop";
+
 /** Wired vs Wi-Fi, from the device's `DevInfo` MACs + DDMS `NETMODE`. */
 export type NetMode = "ethernet" | "wifi";
 
@@ -72,6 +75,8 @@ export interface DeviceSnapshot {
   mute: boolean;
   /** Raw `CURRSOURCE` integer. */
   source: number | null;
+  /** Human label for `source` (`Idle` / `Streaming` / `Source N`). */
+  sourceLabel: string | null;
   /** Raw `PLAY_STATE` integer (`0` stopped / `1` playing). */
   playState: number | null;
   track: Track | null;

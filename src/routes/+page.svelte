@@ -2,12 +2,15 @@
   import RoleBadge from "$lib/components/device/RoleBadge.svelte";
   import SourceBadge from "$lib/components/device/SourceBadge.svelte";
   import NetBadge from "$lib/components/device/NetBadge.svelte";
+  import VolumeSlider from "$lib/components/device/VolumeSlider.svelte";
+  import NowPlaying from "$lib/components/device/NowPlaying.svelte";
+  import TransportBar from "$lib/components/device/TransportBar.svelte";
   import { devices } from "$lib/stores/devices.svelte";
   import { sinceLabel } from "$lib/format";
 
-  // Live device summary, fed by the poller through the devices store. Volume is
-  // read-only here: sliders, transport and the Spotify Connect hint (FR-15…
-  // FR-17, FR-26) belong to the full dashboard in M5/M6.
+  // Live dashboard, fed by the poller through the devices store. Per-device
+  // cards carry volume, mute, transport and now-playing (R3); optimistic control
+  // with rollback lives in the store.
 </script>
 
 <svelte:head><title>MusicSync</title></svelte:head>
@@ -66,23 +69,25 @@
             {/if}
             <RoleBadge role={device.role} />
             {#if device.online && device.source !== null}
-              <SourceBadge source={device.source} />
+              <SourceBadge source={device.source} label={device.sourceLabel} />
             {/if}
           </div>
 
-          <p class="mt-2 truncate text-xs text-slate-500">
-            {#if !device.online}
+          {#if !device.online}
+            <p class="mt-2 truncate text-xs text-slate-500">
               Offline · {sinceLabel(device.lastSeen)}
-            {:else if device.playState === 1 && (device.track?.title || device.track?.artist)}
-              ♪ {[device.track?.title, device.track?.artist].filter(Boolean).join(" — ")}
-            {:else if device.volume !== null}
-              Volume {device.volume}{device.mute ? " · muted" : ""}
-            {:else if device.role === "slave"}
-              Following the group master
-            {:else}
-              Online
-            {/if}
-          </p>
+            </p>
+          {:else if device.role === "slave"}
+            <p class="mt-2 truncate text-xs text-slate-500">Following the group master</p>
+          {:else}
+            <div class="mt-3 flex flex-col gap-2.5">
+              {#if device.volume !== null}
+                <VolumeSlider {device} />
+              {/if}
+              <NowPlaying {device} />
+              <TransportBar {device} />
+            </div>
+          {/if}
         </li>
       {/each}
     </ul>

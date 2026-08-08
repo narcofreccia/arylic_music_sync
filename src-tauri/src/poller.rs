@@ -36,10 +36,16 @@ pub const EVENT_DEVICE_OFFLINE: &str = "device-offline";
 const OFFLINE_AFTER_FAILURES: u32 = 3;
 /// Reconnect/retry cadence once offline.
 const OFFLINE_BACKOFF: [u64; 3] = [5_000, 10_000, 30_000];
-/// Floor for the configurable poll interval.
+/// Floor for the poll interval.
 const MIN_POLL_MS: u64 = 1_000;
+/// Adaptive cadence: snappier while the window is focused, relaxed when it is
+/// not (NFR — no point polling a window the user isn't looking at).
+const FOCUSED_POLL_MS: u64 = 2_000;
+const BLURRED_POLL_MS: u64 = 5_000;
 /// DDMS topology probe budget per cycle.
 const DDMS_TIMEOUT: Duration = Duration::from_millis(1_500);
+/// UPnP now-playing budget per cycle (only spent while a device is playing).
+const NOW_PLAYING_TIMEOUT: Duration = Duration::from_millis(1_500);
 
 /// Unix milliseconds.
 pub fn now_ms() -> i64 {
@@ -55,15 +61,53 @@ struct PollHandle {
 }
 
 /// Owns the poll tasks and the last-known state of every device.
-#[derive(Default)]
 pub struct Poller {
     tasks: Mutex<HashMap<String, PollHandle>>,
     snapshots: RwLock<HashMap<String, DeviceSnapshot>>,
+    /// Window focus, driving the adaptive interval. Starts focused (the window
+    /// is up when the app launches).
+    focused: std::sync::atomic::AtomicBool,
+}
+
+impl Default for Poller {
+    fn default() -> Self {
+        Self {
+            tasks: Mutex::new(HashMap::new()),
+            snapshots: RwLock::new(HashMap::new()),
+            focused: std::sync::atomic::AtomicBool::new(true),
+        }
+    }
 }
 
 impl Poller {
     pub fn snapshot(&self, uuid: &str) -> Option<DeviceSnapshot> {
         self.snapshots.read().expect("snapshot lock poisoned").get(uuid).cloned()
+    }
+
+    /// The poll interval for the current focus state.
+    pub fn poll_interval_ms(&self) -> u64 {
+        let ms = if self.focused.load(std::sync::atomic::Ordering::Relaxed) {
+            FOCUSED_POLL_MS
+        } else {
+            BLURRED_POLL_MS
+        };
+        ms.max(MIN_POLL_MS)
+    }
+
+    /// Record window focus/blur. Kicks every loop so the new cadence takes hold
+    /// at once rather than after the current (possibly 5 s) sleep.
+    pub fn set_focused(&self, focused: bool) {
+        let prev = self.focused.swap(focused, std::sync::atomic::Ordering::Relaxed);
+        if prev != focused {
+            self.kick_all();
+        }
+    }
+
+    /// Wake every device's loop now.
+    pub fn kick_all(&self) {
+        for handle in self.tasks.lock().expect("poll task lock poisoned").values() {
+            handle.kick.notify_one();
+        }
     }
 
     pub fn put(&self, snapshot: DeviceSnapshot) {
@@ -155,14 +199,31 @@ pub(crate) async fn read_once(client: &LuciClient, ip: &str, position_ms: Option
         model::parse_source(&p)
     }).flatten();
 
-    let mut track = client.read(MessageBox::TrackInfo).await.ok().and_then(|p| {
-        raw.insert("trackInfo".into(), json!(p));
-        let t = Track::parse_track_info(&p);
-        (!t.is_empty()).then_some(t)
-    });
-    if let Some(t) = track.as_mut() {
-        t.position_ms = position_ms;
-    } else if position_ms.is_some() {
+    // Now-playing. Luci `TRACK_INFO(44)` does not answer on this firmware (it
+    // times out even mid-playback), so metadata comes from UPnP GetPositionInfo
+    // instead — and only while actually playing, so an idle device never pays a
+    // UPnP round trip. Best-effort: an unreachable renderer degrades to `None`.
+    let mut track = None;
+    if play_state == Some(1) {
+        if let Ok(Ok(np)) = tokio::time::timeout(NOW_PLAYING_TIMEOUT, crate::upnp::now_playing(ip)).await {
+            if !np.is_empty() {
+                raw.insert("nowPlaying".into(), json!({
+                    "title": np.title, "artist": np.artist, "album": np.album,
+                    "durationMs": np.duration_ms, "positionMs": np.position_ms,
+                }));
+                track = Some(Track {
+                    title: np.title,
+                    artist: np.artist,
+                    album: np.album,
+                    duration_ms: np.duration_ms,
+                    // Prefer the UPnP RelTime, falling back to the Luci push.
+                    position_ms: np.position_ms.or(position_ms),
+                });
+            }
+        }
+    }
+    // If UPnP gave nothing but a duration push landed, still surface a position.
+    if track.is_none() && position_ms.is_some() {
         track = Some(Track { position_ms, ..Track::default() });
     }
 
@@ -229,6 +290,7 @@ pub(crate) fn build_snapshot(
         volume: reading.volume,
         mute: reading.mute,
         source: reading.source,
+        source_label: reading.source.map(model::source_label),
         play_state: reading.play_state,
         track: reading.track.clone(),
         last_seen: Some(last_seen),
@@ -254,7 +316,7 @@ async fn run(app: AppHandle, uuid: String, ip: String, kick: std::sync::Arc<Noti
         let config = store::get(&app);
         let saved = config.devices.iter().find(|d| d.uuid == uuid);
         let alias = saved.and_then(|d| d.alias.clone());
-        let poll_ms = config.settings.poll_ms.max(MIN_POLL_MS);
+        let poll_ms = app.state::<AppState>().poller.poll_interval_ms();
 
         // (Re)connect if needed. A fresh connection reloads the cached identity.
         if client.is_none() {

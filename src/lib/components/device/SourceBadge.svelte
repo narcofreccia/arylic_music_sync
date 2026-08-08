@@ -3,20 +3,12 @@
   // the LP10 is not yet field-verified, so a known code gets a label and anything
   // else is shown as its raw number rather than guessed at.
 
-  let { source }: { source: number | null } = $props();
+  // Prefer the Rust-side label (`device.sourceLabel`), which centralises the
+  // field-verified mapping (docs/firmware-notes.md); fall back to the raw code.
+  let { source, label: given = null }: { source: number | null; label?: string | null } =
+    $props();
 
-  const LABELS: Record<number, string> = {
-    0: "Idle",
-    1: "AirPlay",
-    2: "DLNA",
-    3: "Wi-Fi stream",
-    4: "Bluetooth",
-    5: "Line-in",
-    6: "Optical",
-    10: "Network"
-  };
-
-  const label = $derived(source === null ? "" : (LABELS[source] ?? `Source ${source}`));
+  const label = $derived(given ?? (source === null ? "" : `Source ${source}`));
 </script>
 
 {#if label}

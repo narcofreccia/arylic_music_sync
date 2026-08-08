@@ -4,10 +4,11 @@
 //! / FR-27 (polling interval, theme, Group Guard, failover) lands with M6, which
 //! will extend this module rather than start a new one.
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 use crate::discovery;
 use crate::error::AppResult;
+use crate::state::AppState;
 use crate::store::{self, Settings};
 
 /// The persisted preferences, as the settings page renders them.
@@ -31,4 +32,12 @@ pub fn set_subnet(app: AppHandle, cidr: Option<String>) -> AppResult<Settings> {
         config.settings.subnet = cidr;
         Ok(config.settings.clone())
     })
+}
+
+/// Window focus/blur → adaptive poll cadence (2 s focused, 5 s blurred). Wired
+/// from `+layout.svelte`'s focus/blur listeners. Cheap and idempotent, so the
+/// frontend can fire it freely.
+#[tauri::command]
+pub fn set_poll_profile(app: AppHandle, focused: bool) {
+    app.state::<AppState>().poller.set_focused(focused);
 }

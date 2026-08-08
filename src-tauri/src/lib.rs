@@ -20,6 +20,7 @@ pub mod net;
 pub mod poller;
 pub mod state;
 pub mod store;
+pub mod upnp;
 
 use tauri::Manager;
 
@@ -66,10 +67,14 @@ pub fn run() {
             commands::devices::get_status,
             commands::devices::refresh_device,
             commands::devices::local_address,
+            commands::playback::set_volume,
+            commands::playback::set_mute,
+            commands::playback::player_cmd,
             commands::scan::scan,
             commands::scan::cancel_scan,
             commands::settings::get_settings,
             commands::settings::set_subnet,
+            commands::settings::set_poll_profile,
         ])
         .run(tauri::generate_context!())
         .expect("error while running MusicSync");

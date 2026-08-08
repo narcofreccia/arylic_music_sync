@@ -1,11 +1,14 @@
 <script lang="ts">
   import { devices } from "$lib/stores/devices.svelte";
   import { errorMessage } from "$lib/tauri/commands";
-  import { clock, sinceLabel } from "$lib/format";
+  import { sinceLabel } from "$lib/format";
   import DeviceDetailPane from "./DeviceDetail.svelte";
   import RoleBadge from "./RoleBadge.svelte";
   import SourceBadge from "./SourceBadge.svelte";
   import NetBadge from "./NetBadge.svelte";
+  import VolumeSlider from "./VolumeSlider.svelte";
+  import NowPlaying from "./NowPlaying.svelte";
+  import TransportBar from "./TransportBar.svelte";
   import type { DeviceSnapshot } from "$lib/types";
 
   // One row of the device list (FR-6 … FR-9). Actions go straight to the
@@ -99,29 +102,30 @@
         {/if}
         <RoleBadge role={device.role} />
         {#if device.online && device.source !== null}
-          <SourceBadge source={device.source} />
+          <SourceBadge source={device.source} label={device.sourceLabel} />
         {/if}
       </div>
 
-      <p class="mt-1 truncate text-xs text-slate-500">
-        {#if !device.online}
-          Offline · {sinceLabel(device.lastSeen)}
-        {:else if nowPlaying}
-          ♪ {nowPlaying}
-          {#if device.track && device.track.durationMs}
-            <span class="text-slate-600">
-              · {clock(device.track.positionMs ?? 0)} / {clock(device.track.durationMs)}</span
-            >
+      {#if !device.online}
+        <p class="mt-1 truncate text-xs text-slate-500">Offline · {sinceLabel(device.lastSeen)}</p>
+      {:else if device.role === "slave"}
+        <p class="mt-1 truncate text-xs text-slate-500">Following the group master</p>
+      {:else}
+        <div class="mt-2 flex flex-col gap-2">
+          {#if device.volume !== null}
+            <VolumeSlider {device} />
           {/if}
-        {:else if device.role === "slave"}
-          Following the group master
-        {:else if device.volume !== null}
-          Volume {device.volume}{device.mute ? " · muted" : ""}
-          {#if device.model}· {device.model}{/if}
-        {:else}
-          Online
-        {/if}
-      </p>
+          <NowPlaying {device} />
+          <TransportBar {device} />
+          {#if !nowPlaying && device.playState !== 1}
+            <p class="truncate text-xs text-slate-500">
+              {device.sourceLabel && device.sourceLabel !== "Idle"
+                ? device.sourceLabel
+                : "Idle"}{device.model ? ` · ${device.model}` : ""}
+            </p>
+          {/if}
+        </div>
+      {/if}
     </div>
 
     <div class="flex shrink-0 flex-wrap items-center gap-1.5">

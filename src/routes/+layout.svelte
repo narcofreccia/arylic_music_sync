@@ -4,10 +4,14 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import type { UnlistenFn } from "@tauri-apps/api/event";
   import { updates } from "$lib/stores/updates.svelte";
   import { session } from "$lib/stores/session.svelte";
   import { devices } from "$lib/stores/devices.svelte";
   import { scan } from "$lib/stores/scan.svelte";
+  import { toasts } from "$lib/stores/toasts.svelte";
+  import { commands } from "$lib/tauri/commands";
 
   let { children } = $props();
 
@@ -21,9 +25,20 @@
     void session.init();
     // Silent launch check — offline/LAN-only use is normal, so never surfaces.
     void updates.start();
+
+    // Adaptive polling: tell Rust when the window gains/loses focus so the
+    // poller can slow down (5 s) while the user isn't looking, speed up (2 s)
+    // when they are.
+    let unlistenFocus: UnlistenFn | undefined;
+    void getCurrentWindow()
+      .onFocusChanged(({ payload: focused }) => void commands.setPollProfile(focused))
+      .then((off) => (unlistenFocus = off))
+      .catch((e) => console.error("[layout] focus listener failed:", e));
+
     return () => {
       devices.stop();
       scan.stop();
+      unlistenFocus?.();
     };
   });
 
@@ -118,5 +133,30 @@
     <main class="flex-1 overflow-auto p-6">
       {@render children()}
     </main>
+  </div>
+{/if}
+
+<!-- Command-failure toasts (R3, NFR-2): rollback notifications from the store. -->
+{#if toasts.items.length > 0}
+  <div class="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-2 px-4">
+    {#each toasts.items as toast (toast.id)}
+      <div
+        role="status"
+        class="pointer-events-auto flex max-w-md items-start gap-3 rounded-lg border px-4 py-2.5 text-sm shadow-lg {toast.tone ===
+        'error'
+          ? 'border-red-500/40 bg-red-500/15 text-red-200'
+          : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] text-slate-200'}"
+      >
+        <span class="flex-1">{toast.message}</span>
+        <button
+          type="button"
+          onclick={() => toasts.dismiss(toast.id)}
+          class="shrink-0 text-slate-400 transition-colors hover:text-white"
+          aria-label="Dismiss"
+        >
+          ✕
+        </button>
+      </div>
+    {/each}
   </div>
 {/if}

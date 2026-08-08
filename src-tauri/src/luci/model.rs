@@ -72,6 +72,28 @@ pub fn parse_source(payload: &str) -> Option<i32> {
     payload.trim().parse().ok()
 }
 
+/// `CURRSOURCE(50)`/`PlayBackSource(10)` integer → a human label.
+///
+/// Only two codes are field-verified on LP10 firmware `AR241CE_9243.16.2`:
+/// `0` = idle (the wired main unit at rest) and `4` = an active audio stream
+/// (the garden unit while playing). The exact service name behind each other
+/// code is **not** confirmed on this hardware, so anything else degrades to
+/// `"Source N"` rather than guessing (docs/firmware-notes.md).
+pub fn source_label(source: i32) -> String {
+    match source {
+        0 => "Idle".to_string(),
+        4 => "Streaming".to_string(),
+        n => format!("Source {n}"),
+    }
+}
+
+/// Whether a source is one the transport controls (play/pause/next/prev) can
+/// meaningfully act on. `0` (idle) is not; an active stream is. Unknown codes
+/// are treated as controllable so a real source is never left without controls.
+pub fn source_controllable(source: i32) -> bool {
+    source != 0
+}
+
 // --------------------------------------------------------------- DDMS banner --
 
 /// A parsed DDMS M-SEARCH banner (CRLF `KEY:VALUE` lines). Keys are uppercased so
@@ -269,6 +291,8 @@ pub struct DeviceSnapshot {
     pub mute: bool,
     /// Raw `CURRSOURCE` integer.
     pub source: Option<i32>,
+    /// Human label for `source` (`Idle` / `Streaming` / `Source N`).
+    pub source_label: Option<String>,
     /// Raw `PLAY_STATE` integer (`0`/`1`).
     pub play_state: Option<i32>,
     pub track: Option<Track>,
@@ -298,6 +322,7 @@ impl DeviceSnapshot {
             volume: None,
             mute: false,
             source: None,
+            source_label: None,
             play_state: None,
             track: None,
             last_seen,
@@ -317,6 +342,7 @@ impl DeviceSnapshot {
         self.volume = None;
         self.mute = false;
         self.source = None;
+        self.source_label = None;
         self.play_state = None;
         self.track = None;
         self.role = Role::Solo;
@@ -377,6 +403,17 @@ mod tests {
         assert!(!parse_mute("UNMUTE"));
         assert_eq!(parse_play_state("1"), Some(1));
         assert_eq!(parse_source("10"), Some(10));
+    }
+
+    #[test]
+    fn source_label_maps_verified_codes_and_degrades() {
+        assert_eq!(source_label(0), "Idle");
+        assert_eq!(source_label(4), "Streaming");
+        assert_eq!(source_label(2), "Source 2");
+        assert_eq!(source_label(99), "Source 99");
+        assert!(!source_controllable(0));
+        assert!(source_controllable(4));
+        assert!(source_controllable(7));
     }
 
     #[test]

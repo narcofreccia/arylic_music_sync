@@ -5,6 +5,7 @@ import type {
   DeviceCandidate,
   DeviceDetail,
   DeviceSnapshot,
+  PlayerCmd,
   ScanOptions,
   Settings,
 } from "$lib/types";
@@ -56,6 +57,20 @@ export const commands = {
 
   /** Wake the device's poll loop instead of waiting out the interval. */
   refreshDevice: (uuid: string) => invoke<void>("refresh_device", { uuid }),
+
+  // ------------------------------------------------------------ playback --
+
+  /** Set absolute volume 0..100 over Luci `VOLUME(64)` (clamped in Rust). */
+  setVolume: (uuid: string, vol: number) => invoke<void>("set_volume", { uuid, vol }),
+
+  /** Mute/unmute over Luci `Mute_Unmute(63)`. */
+  setMute: (uuid: string, mute: boolean) => invoke<void>("set_mute", { uuid, mute }),
+
+  /** Transport: `play` | `pause` | `next` | `prev` | `stop` (UPnP, Luci fallback). */
+  playerCmd: (uuid: string, cmd: PlayerCmd) => invoke<void>("player_cmd", { uuid, cmd }),
+
+  /** Focus/blur → adaptive poll cadence (2 s focused / 5 s blurred). */
+  setPollProfile: (focused: boolean) => invoke<void>("set_poll_profile", { focused }),
 
   /** This machine's LAN address — a hint for the manual-add form. */
   localAddress: () => invoke<string | null>("local_address"),

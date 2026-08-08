@@ -42,37 +42,25 @@ async fn main() {
         println!("  {mb:?} = {:?}", read(&client, mb).await);
     }
 
-    // -- VOLUME write --
-    println!("\n== VOLUME(64) write test ==");
-    let before = read(&client, MessageBox::Volume).await;
-    println!("  before: {before:?}");
-    match client.write(MessageBox::Volume, "22").await {
-        Ok(r) => println!("  WRITE \"22\" ok (reply {r:?})"),
-        Err(e) => println!("  WRITE \"22\" FAILED: {e}"),
-    }
+    // -- VOLUME write (fire-and-forget: firmware sends no reply frame) --
+    println!("\n== VOLUME(64) write test (write_oneway) ==");
+    let t = std::time::Instant::now();
+    println!("  before: {:?}", read(&client, MessageBox::Volume).await);
+    client.write_oneway(MessageBox::Volume, "22").await.expect("send 22");
     tokio::time::sleep(Duration::from_millis(400)).await;
-    println!("  after 22: {:?}", read(&client, MessageBox::Volume).await);
-    match client.write(MessageBox::Volume, "30").await {
-        Ok(r) => println!("  WRITE \"30\" ok (reply {r:?})"),
-        Err(e) => println!("  WRITE \"30\" FAILED: {e}"),
-    }
+    println!("  after set 22: {:?}", read(&client, MessageBox::Volume).await);
+    client.write_oneway(MessageBox::Volume, "30").await.expect("send 30");
     tokio::time::sleep(Duration::from_millis(400)).await;
-    println!("  restored: {:?}", read(&client, MessageBox::Volume).await);
+    println!("  restored 30: {:?}", read(&client, MessageBox::Volume).await);
+    println!("  (elapsed {:?} — no per-write timeout stall)", t.elapsed());
 
-    // -- MUTE toggle --
-    println!("\n== Mute_Unmute(63) write test ==");
-    let m0 = read(&client, MessageBox::MuteUnmute).await;
-    println!("  before: {m0:?}");
-    match client.write(MessageBox::MuteUnmute, "MUTE").await {
-        Ok(r) => println!("  WRITE \"MUTE\" ok (reply {r:?})"),
-        Err(e) => println!("  WRITE \"MUTE\" FAILED: {e}"),
-    }
+    // -- MUTE toggle (also fire-and-forget) --
+    println!("\n== Mute_Unmute(63) write test (write_oneway) ==");
+    println!("  before: {:?}", read(&client, MessageBox::MuteUnmute).await);
+    client.write_oneway(MessageBox::MuteUnmute, "MUTE").await.expect("send MUTE");
     tokio::time::sleep(Duration::from_millis(400)).await;
     println!("  after MUTE: {:?}", read(&client, MessageBox::MuteUnmute).await);
-    match client.write(MessageBox::MuteUnmute, "UNMUTE").await {
-        Ok(r) => println!("  WRITE \"UNMUTE\" ok (reply {r:?})"),
-        Err(e) => println!("  WRITE \"UNMUTE\" FAILED: {e}"),
-    }
+    client.write_oneway(MessageBox::MuteUnmute, "UNMUTE").await.expect("send UNMUTE");
     tokio::time::sleep(Duration::from_millis(400)).await;
     println!("  restored: {:?}", read(&client, MessageBox::MuteUnmute).await);
 
