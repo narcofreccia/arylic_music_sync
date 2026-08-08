@@ -171,6 +171,7 @@
             <li><span class="badge status done">done</span><span class="t">S1 de-risk: RAOP multi-device sync is real (shared NTP master clock, one <code>cliraop</code> client/speaker); prebuilt <code>cliraop</code> incl Windows → bundle as sidecar, no C toolchain in CI. Design in <code>docs/STREAMING-design.md</code>.</span></li>
             <li><span class="badge status done">done</span><span class="t">S2: cliraop sidecar + streaming engine (shared-NTP anchor, PCM fan-out, per-device vol/delay). <strong>Validated sample-locked: 0.000ms inter-receiver lag / 0.000ms drift</strong> on local shairport-sync rig. 66 tests. Prebuilt binaries per platform via <code>scripts/fetch_cliraop.sh</code>.</span></li>
             <li><span class="badge status done">done</span><span class="t">S3: librespot Spotify Connect capture ("MusicSync", Premium) → RingSink PCM → live fan-out into the sync engine. vergen pinned. 77 tests. Binary 25.3MB. Home test: <code>examples/spotify_capture.rs</code> (pending user Premium run).</span></li>
+            <li><span class="badge status done">done</span><span class="t">Polish: fixed Spotify track auto-skip (real-time sink pacing); manual/test RAOP speaker (add-by-IP → local shairport-sync = testable with no LP10s); persisted per-device delay (0–2000ms, live + pre-stream). Cross-platform sidecar wiring: <code>fetch_cliraop.sh</code> into mac build_release + Windows CI; DLLs via tauri.windows.conf.json. Windows build validated in CI (ci-build.yml).</span></li>
             <li><span class="badge status blocked">blocked</span><span class="t">S4: real-hardware bring-up — LP10 accepts bare RAOP sender? latency/drift tuning. <em>Needs LP10s on-site.</em></span></li>
             <li><span class="badge status done">done</span><span class="t">S5: "Play Everywhere" UI — Spotify capture panel (connect status, now-playing, master transport), speaker group picker, per-room volume+delay. Wired to S2/S3.</span></li>
           </ul>
@@ -197,6 +198,9 @@
           <tr><td>2026-08-08</td><td class="path">93c1aa6</td><td>S2: RAOP multi-sender + sync core — sample-locked (0ms lag) on local rig</td></tr>
           <tr><td>2026-08-08</td><td class="path">0f5a5f9</td><td>S3: Spotify capture via librespot -> PCM into the sync engine</td></tr>
           <tr><td>2026-08-08</td><td class="path">038da6b</td><td>S5: Play Everywhere streaming UI</td></tr>
+          <tr><td>2026-08-08</td><td class="path">d1b49f3</td><td>fix(spotify): pace capture sink to real-time (no track auto-skip)</td></tr>
+          <tr><td>2026-08-08</td><td class="path">4dd1144</td><td>build: cliraop sidecar cross-platform + Windows CI validation</td></tr>
+          <tr><td>2026-08-08</td><td class="path">88d972a</td><td>feat(stream): manual/test speaker (add-by-IP) + persisted per-device delay</td></tr>
         </tbody>
       </table>
 
