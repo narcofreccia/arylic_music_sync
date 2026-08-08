@@ -169,8 +169,8 @@
         <div class="body">
           <ul class="tasks">
             <li><span class="badge status done">done</span><span class="t">S1 de-risk: RAOP multi-device sync is real (shared NTP master clock, one <code>cliraop</code> client/speaker); prebuilt <code>cliraop</code> incl Windows → bundle as sidecar, no C toolchain in CI. Design in <code>docs/STREAMING-design.md</code>.</span></li>
-            <li><span class="badge status wip">wip</span><span class="t">S2: cliraop sidecar + Rust streaming module (tee PCM, shared anchor, per-device vol/delay); validate 2-receiver sync on local <code>shairport-sync</code> rig (no LP10s).</span></li>
-            <li><span class="badge status todo">todo</span><span class="t">S3: librespot in-proc Spotify Connect capture → PCM (pin vergen build-dep first). Premium; user picks "MusicSync".</span></li>
+            <li><span class="badge status done">done</span><span class="t">S2: cliraop sidecar + streaming engine (shared-NTP anchor, PCM fan-out, per-device vol/delay). <strong>Validated sample-locked: 0.000ms inter-receiver lag / 0.000ms drift</strong> on local shairport-sync rig. 66 tests. Prebuilt binaries per platform via <code>scripts/fetch_cliraop.sh</code>.</span></li>
+            <li><span class="badge status wip">wip</span><span class="t">S3: librespot in-proc Spotify Connect capture → PCM (pin vergen build-dep first). Premium; user picks "MusicSync".</span></li>
             <li><span class="badge status blocked">blocked</span><span class="t">S4: real-hardware bring-up — LP10 accepts bare RAOP sender? latency/drift tuning. <em>Needs LP10s on-site.</em></span></li>
             <li><span class="badge status todo">todo</span><span class="t">S5: "Play Everywhere" UI (pick speakers into stream group, master transport, per-room volume + delay).</span></li>
           </ul>
@@ -194,6 +194,7 @@
           <tr><td>2026-08-08</td><td class="path">d60c843</td><td>R4: settings, theme, autostart, config export/import, packaging polish</td></tr>
           <tr><td>2026-08-08</td><td class="path">ca2ef5d</td><td>docs: audio-streaming feasibility (librespot + AirPlay/RAOP)</td></tr>
           <tr><td>2026-08-08</td><td class="path">2769b89</td><td>docs: streaming design + de-risk (RAOP multi-sync via cliraop sidecar)</td></tr>
+          <tr><td>2026-08-08</td><td class="path">93c1aa6</td><td>S2: RAOP multi-sender + sync core — sample-locked (0ms lag) on local rig</td></tr>
         </tbody>
       </table>
 
