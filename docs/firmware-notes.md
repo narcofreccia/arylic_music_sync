@@ -167,3 +167,30 @@ settings. AirPlay 2 is the other (Apple-side) path.
   target them / show unified now-playing; (b) implement local Cast multizone if the LP10
   exposes it (uncertain, needs a spike); (c) scope the app to a great per-device controller +
   a clear "cast to your group / select in Spotify Connect" hint. Decision pending with user.
+
+## H. Can we create a Cast group locally (no Google Home)? — NO (2026-08-08)
+
+The LP10s run real Chromecast firmware (`1.68.cast_20240119`, Cast setup API on port **8008**
+open; `/setup/eureka_info` responds with device info + public_key). But:
+- **Creating** a Cast speaker group is a Google Home / Home-Graph (cloud) operation. There is
+  no public/known local API to create a group; modern firmware gates group config behind
+  cloud device-auth (the eureka public_key). `pychromecast` (the reference Cast lib) can
+  *discover and control* existing groups but **cannot create** them. Confirmed via research.
+- Native DDMS grouping is disabled on LP10 (§G).
+- AirPlay 2 grouping is Apple-sender-driven (macOS/iOS), not something a cross-platform LAN
+  app creates, and needs the app to be the audio source (out of scope).
+
+**Net:** true sample-synced multiroom on these LP10s requires Google's cloud (Home app) — which
+in this deployment can't even see the devices (the reason for this app) — or native firmware
+grouping Arylic didn't enable. Neither is reachable locally.
+
+### The one locally-achievable "play everywhere" (no cloud)
+Cast the **same media locally to each LP10 individually** over CASTV2 (TLS 8009, protobuf) —
+"parallel cast", not a real group. No Google Home needed. Caveats: (1) NOT sample-synced
+(each device plays independently; rooms may drift by fractions of a second to ~1s), (2) works
+only for castable content the app can point at (a stream/URL/local file the app serves) —
+**not Spotify Connect**, since Spotify casting is driven by the Spotify app, not us.
+
+Open hypothesis (untested, needs ≥2 Wi-Fi units): DDMS may require both speakers on the same
+Wi-Fi interface (the doc notes `SO_BINDTODEVICE` to the active interface + WLAN-IP reachability);
+the wired master may be why DDMS no-ops. Worth one test when more wireless LP10s are online.
