@@ -97,3 +97,41 @@ The Linkplay-based plan (M2 client, M4 grouping, M5 guard) must be re-based onto
   and already proven, Luci gives push events. Decide during M5.
 
 Reference SDK (authoritative): https://github.com/LibreWireless/LSCommunicator (Swift).
+
+## F. Grouping grammar (DDMS) — recovered 2026-08-08
+
+Reference: `github.com/JohnnyLeone/hass-studioart` `docs/PROTOCOL.md` — a deep RE of the SAME
+LibreWireless LUCI protocol (Revox StudioArt, LS9). Every `MessageBox` id maps to its LUCI op
+1:1 (op `0x64`=100 `ddms`, `0x67`=103 `ddms status`, `0x68`=104 `groupid`, `0x69`=105 `ssid`,
+`0x65/0x66`=101/102 `ooh master/slave`, `0xDB`=219 `zone volume`, `0xD8`=216 `slave info`).
+
+**Group/topology state** is best read from the **DDMS M-SEARCH** (UDP 1800,
+`ST: urn:schemas-upnp-org:device:DDMSServer:1`). Each speaker replies with a CRLF KEY:VALUE
+banner (verified live):
+```
+DeviceName, State (S=standalone), NETMODE (ETH0|WLAN), WIFIBAND (ETH|2G), SPEAKERTYPE,
+PORT:7777 (Luci), TCPPORT:2020, MRAMode:DDMS, SOURCE_LIST, USN (id)
+```
+→ NETMODE/WIFIBAND give the **wired vs Wi-Fi** distinction; State/MRAMode give group role.
+
+**Grouping ops** — Luci cmd **100** (`MRATrigger`/`ddms`), WRITE, **ASCII verb payload**
+(exact length enforced by firmware): `SETMASTER`(9), `SETSLAVE`(8), `SETFREE`(7),
+`JOINTO`(6), `JOINALL`(7), `JOINNEXT`(8), `DROPALL`(7), `DROPME`(6). `SETFREE`/`DROPALL`
+= ungroup; `DROPME` = leave. Rejected unless device is "free"; a half-finished pairing
+self-heals to free in ~35 s (keepalive `ALIVE`/`MALIVE` timeout, NV `0xCB`).
+
+**How a group actually forms** (the verbs only steer; DDMS runs the link):
+1. Master sets `ooh master` (101, multicast `239.255.255.251:3000`), `groupid` (104),
+   `ssid` (105), then `SETMASTER` (100). `CONCOUNT`: 1 = stereo pair, **32 = multi-channel
+   (whole-house) master**, 0 = clear.
+2. Slave discovers the master by SSID/zone-id (DDMS M-SEARCH) and `SETSLAVE`/`JOINTO`/`JOINALL`
+   (100); DDMS opens a direct TCP link (master accepts, slave connects), then RTP audio.
+3. Per-zone volume in a group = `zone volume control` (219) / `client zone volume` (220).
+
+**Verified live 2026-08-08:** `SETMASTER` then `SETFREE` on the idle wired main unit — both
+acked (status=1), left the device standalone (self-consistent). Full multi-step group
+formation (master multicast+groupid+ssid then slave join) to be implemented and audio-verified
+in M4. `0x67`/103 `ddms status` is a PUSH (subscribe via `REG_ASYNC_EVENTS`=3), not a plain read.
+
+**Per-device control verified live:** `VOLUME`(64) READ→`30`, WRITE `25` set it, restored;
+`Mute`(63)→`UNMUTE`, `PLAY_STATE`(51)→`0/1`, `CURRSOURCE`(50), `DevName`(90), `DevInfo`(92 JSON).
