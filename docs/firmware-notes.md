@@ -135,3 +135,35 @@ in M4. `0x67`/103 `ddms status` is a PUSH (subscribe via `REG_ASYNC_EVENTS`=3), 
 
 **Per-device control verified live:** `VOLUME`(64) READ→`30`, WRITE `25` set it, restored;
 `Mute`(63)→`UNMUTE`, `PLAY_STATE`(51)→`0/1`, `CURRSOURCE`(50), `DevName`(90), `DevInfo`(92 JSON).
+
+## G. Native DDMS grouping is NON-FUNCTIONAL on LP10 — grouping is Cast/AirPlay only (2026-08-08)
+
+Live result: the Luci DDMS group verbs are **accepted but have no effect** on LP10 firmware
+`AR241CE_9243.16.2`.
+- `MRATrigger=100` `SETMASTER`/`SETSLAVE`/`JOINTO`/`JOINALL`/`SETFREE` all return status=1
+  (accepted, not the error status 2), but the DDMS M-SEARCH `State` never leaves `S`
+  (standalone), no `ddms status` (103) push ever fires, and `ClientsInMRA`(110)/`SlaveInfo`(216)
+  return nothing.
+- `setZoneID=104` and `DDMS_SSID=105` **writes get no ack at all** on this firmware.
+- Tried with and without master zone-id/ssid/ooh-master setup; both idle→idle. No grouping.
+
+This matches Arylic's official position (product page + forum): **the LP10 does NOT support
+native Arylic/Linkplay multiroom; it syncs only via AirPlay 2 or Google Cast.** The LibreWireless
+module ships the DDMS command surface (so the LUCI daemon acks the verbs), but Arylic did not
+enable the DDMS multiroom engine on the LP10 — multiroom is delegated to Cast/AirPlay.
+
+**Confirmed grouping path = Google Cast:** both units have port **8009** open and advertise
+`_googlecast._tcp` (mDNS instance names `LP10-<id>`). "Google Cast: Activated" in the device
+settings. AirPlay 2 is the other (Apple-side) path.
+
+### Consequence for the app
+- **Per-device control works great** via Luci/UPnP (volume, mute, transport, source,
+  now-playing, wired/Wi-Fi) — keep and ship it.
+- **"Play the same music everywhere" cannot be done via a direct LP10 LAN grouping API.**
+  It requires Google Cast (or AirPlay 2). Cast *group creation* is a Google Home / cloud
+  function; the local CASTV2 protocol (TLS 8009, protobuf) can discover and control existing
+  Cast devices/groups and cast media, but does not create groups locally in general.
+- Options: (a) integrate CASTV2 to discover Cast groups the user made in Google Home and
+  target them / show unified now-playing; (b) implement local Cast multizone if the LP10
+  exposes it (uncertain, needs a spike); (c) scope the app to a great per-device controller +
+  a clear "cast to your group / select in Spotify Connect" hint. Decision pending with user.
