@@ -60,7 +60,7 @@
         <h1>MusicSync — Project Journal</h1>
         <div class="sub">
           Arylic LP10 LAN multiroom controller — Tauri v2 + SvelteKit (Svelte 5) + Rust, Linkplay HTTP API.
-          &nbsp;·&nbsp; Last updated: <strong>2026-08-08</strong> &nbsp;·&nbsp; Current: <span class="pill">FR-23 spike done — <strong>LP10 speaks LibreWireless Luci, not Linkplay</strong>. Pivoting device layer to Luci; M2/M4/M5 rebasing. Discovery + per-device control + grouping grammar all proven live on real hardware.</span>
+          &nbsp;·&nbsp; Last updated: <strong>2026-08-08</strong> &nbsp;·&nbsp; Current: <span class="pill">Luci pivot underway. <strong>R1 done</strong> — device layer rebased onto Luci (TLS 7777), verified live reading both LP10s. Next: <strong>R2 grouping + group-management UI</strong>.</span>
         </div>
         <div class="howto">
           <strong>How to use.</strong> Living source of truth for progress &amp; focus (referenced from <code>CLAUDE.md</code>).
@@ -76,7 +76,7 @@
           <span><span class="badge status blocked">blocked</span> needs a decision/input</span>
         </div>
         <div class="kpi">
-          <div class="box"><b>4 / 7</b><span>phases done (Infra, M1–M3*)</span></div>
+          <div class="box"><b>5 / 8</b><span>done: Infra, M1, M3, Luci-R1</span></div>
           <div class="box"><b>0.1.0</b><span>version (unreleased)</span></div>
           <div class="box"><b>0</b><span>releases published</span></div>
         </div>
@@ -109,13 +109,13 @@
       </details>
 
       <details class="phase" open>
-        <summary><span class="badge status wip">wip</span><span class="title"><h3>M2 — Device client (REBASE: Linkplay → Luci)</h3> <small>FR-5..9 · HTTP client built, must re-base onto Luci per spike</small></span></summary>
+        <summary><span class="badge status done">done</span><span class="title"><h3>M2/R1 — Device client on Luci</h3> <small>FR-5..9 · rebased + verified live 2026-08-08</small></span></summary>
         <div class="body">
           <ul class="tasks">
             <li><span class="badge status done">done</span><span class="t">Typed client (<code>LinkplayCommand::to_query()</code> single chokepoint), tolerant serde models, hex Title/Artist decode</span></li>
             <li><span class="badge status done">done</span><span class="t">Per-device poller (3 s fixed v1, offline backoff 5/10/30 s), <code>device-updated</code>/<code>device-offline</code> events</span></li>
             <li><span class="badge status done">done</span><span class="t">Add by IP, rename (+push to device), remove, detail view with raw-JSON debug pane; Devices page + dashboard cards</span></li>
-            <li><span class="badge status todo">todo</span><span class="t"><strong>REBASE:</strong> replace HTTP <code>to_query()</code> with Luci codec (TLS 7777 + 10-byte header/JSON + MessageBox), DDMS M-SEARCH discovery, wired/Wi-Fi + group-state from M-SEARCH; keep UPnP :49494 as per-device fallback</span></li>
+            <li><span class="badge status done">done</span><span class="t"><strong>REBASED:</strong> Luci codec (TLS 7777, LE/BE frames, MessageBox), DDMS M-SEARCH + SSDP discovery, wired/Wi-Fi badges, persistent per-device connections + async pushes. Live-verified on 192.168.10.104/.148. 39 tests.</span></li>
             <li><span class="badge status blocked">blocked</span><span class="t"><strong>FR-23 hardware spike</strong> — run <code>docs/firmware-notes.md</code> checklist against a real LP10 (join-variant, slave Ungroup semantics, Spotify Connect detach behavior, emoji rename). Gates M4/M5 defaults. <em>Needs: an LP10 powered on + user present.</em></span></li>
           </ul>
         </div>
@@ -173,6 +173,8 @@
           <tr><td>2026-08-08</td><td class="path">fc52aaf</td><td>docs: add CLAUDE.md project guide + journal.html living progress board</td></tr>
           <tr><td>2026-08-08</td><td class="path">fe3a9d0</td><td>M2: Linkplay typed client, per-device poller, manual add, devices page</td></tr>
           <tr><td>2026-08-08</td><td class="path">0dbc8c8</td><td>M3: network discovery — mDNS + SSDP + subnet sweep with confirm-by-getStatusEx</td></tr>
+          <tr><td>2026-08-08</td><td class="path">993cec0</td><td>docs(spike): FR-23 — LP10 uses LibreWireless Luci, DDMS grouping grammar</td></tr>
+          <tr><td>2026-08-08</td><td class="path">b0fea4c</td><td>R1: rebase device layer onto LibreWireless Luci (TLS 7777), verified live</td></tr>
         </tbody>
       </table>
 
