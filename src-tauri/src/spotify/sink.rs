@@ -14,6 +14,7 @@
 //! the bytes are true s16le regardless of host endianness.
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use librespot_playback::audio_backend::{Sink, SinkError, SinkResult};
 use librespot_playback::config::AudioFormat;
@@ -22,10 +23,25 @@ use librespot_playback::decoder::AudioPacket;
 
 use crate::streaming::live::PcmFanout;
 
+/// librespot decodes to this fixed geometry (44.1 kHz interleaved stereo).
+const SAMPLE_RATE: u64 = 44_100;
+const CHANNELS: u64 = 2;
+/// How far ahead of wall-clock the decoder may run before we throttle it. A real
+/// sound card paces playback; with no local device librespot would otherwise
+/// decode a whole track in a second or two and auto-advance. We let it run this
+/// far ahead so the RAOP sinks have audio to prime their ~1.5 s buffers, then
+/// pace it to 1× so tracks play at normal speed whether or not speakers are
+/// attached.
+const LEAD: Duration = Duration::from_millis(2000);
+
 /// A librespot `Sink` that tees decoded s16le PCM into the streaming engine.
 pub struct RingSink {
     fanout: Arc<PcmFanout>,
     format: AudioFormat,
+    /// Wall-clock origin of the current playback run (reset on start/stop).
+    clock_start: Option<Instant>,
+    /// Frames handed downstream since `clock_start` — the playout position.
+    frames_written: u64,
 }
 
 impl RingSink {
@@ -35,11 +51,44 @@ impl RingSink {
         Self {
             fanout,
             format: AudioFormat::S16,
+            clock_start: None,
+            frames_written: 0,
+        }
+    }
+
+    /// Throttle the decode thread to real time after `frame_count` more frames,
+    /// allowing up to `LEAD` of buffer-priming lead. This is what stops Spotify
+    /// from racing through tracks when nothing is consuming the audio.
+    fn pace(&mut self, frame_count: u64) {
+        let start = *self.clock_start.get_or_insert_with(Instant::now);
+        self.frames_written += frame_count;
+        let playout =
+            Duration::from_nanos(self.frames_written * 1_000_000_000 / SAMPLE_RATE);
+        let target = start + playout;
+        let now = Instant::now();
+        // Sleep only if we've run more than LEAD ahead of the wall clock.
+        if let Some(ahead) = target.checked_duration_since(now) {
+            if ahead > LEAD {
+                std::thread::sleep(ahead - LEAD);
+            }
         }
     }
 }
 
 impl Sink for RingSink {
+    fn start(&mut self) -> SinkResult<()> {
+        // New playback run — reset the real-time clock so pacing tracks it.
+        self.clock_start = None;
+        self.frames_written = 0;
+        Ok(())
+    }
+
+    fn stop(&mut self) -> SinkResult<()> {
+        self.clock_start = None;
+        self.frames_written = 0;
+        Ok(())
+    }
+
     fn write(&mut self, packet: AudioPacket, converter: &mut Converter) -> SinkResult<()> {
         match packet {
             AudioPacket::Samples(samples) => {
@@ -50,6 +99,8 @@ impl Sink for RingSink {
                 let s16 = converter.f64_to_s16(&samples);
                 let bytes = s16_to_le_bytes(&s16);
                 self.fanout.push(bytes);
+                // Pace to 1× real time so tracks don't auto-advance.
+                self.pace(s16.len() as u64 / CHANNELS);
                 Ok(())
             }
             // Raw packets only occur with the passthrough decoder, which we never
