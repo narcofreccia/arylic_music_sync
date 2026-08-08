@@ -193,3 +193,57 @@ export interface SpotifyState {
   volume: number;
   device_name: string;
 }
+
+// ------------------------------------------------------------- streaming (S2) --
+
+/**
+ * One RAOP receiver to fan the synchronized PCM out to (`StreamTarget` in Rust).
+ * The LP10 advertises AirPlay-1 RAOP on port 5000; `uuid` links it back to the
+ * discovered device so we can label it and remember per-room settings.
+ */
+export interface StreamTarget {
+  /** MusicSync device UUID (absent for the local test rig). */
+  uuid: string | null;
+  name: string;
+  ip: string;
+  /** RAOP control port — 5000 for AirPlay 1. */
+  raop_port: number;
+}
+
+/** Where the streamed PCM comes from (`StreamSource` in Rust, tagged by `kind`). */
+export type StreamSource =
+  | { kind: "wav"; path: string }
+  | { kind: "raw_pcm"; path: string }
+  | { kind: "tone"; freq_hz: number; duration_ms: number }
+  | { kind: "spotify" };
+
+/**
+ * Live per-receiver streaming status (`DeviceStatus` in Rust), inside
+ * `StreamStatus.devices`.
+ */
+export interface StreamDeviceStatus {
+  ip: string;
+  name: string;
+  raop_port: number;
+  /** Software volume gain, `0.0..=1.0`. */
+  volume: number;
+  /** Software delay applied ahead of this receiver's audio (ms). */
+  delay_ms: number;
+  /** Whether the child `cliraop` sender process is still alive. */
+  alive: boolean;
+  /** Frames pushed to this child's stdin so far (excludes delay silence). */
+  frames_written: number;
+}
+
+/**
+ * Whole-group streaming status (`StreamStatus` in Rust). Returned by the
+ * `stream_*` commands and pushed on the `stream-state` event.
+ */
+export interface StreamStatus {
+  active: boolean;
+  source: string | null;
+  /** The shared master NTP anchor captured once at start (decimal string). */
+  anchor_ntp: string | null;
+  latency_frames: number;
+  devices: StreamDeviceStatus[];
+}

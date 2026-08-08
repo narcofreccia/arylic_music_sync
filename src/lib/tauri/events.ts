@@ -5,6 +5,7 @@ import type {
   ScanComplete,
   ScanProgress,
   SpotifyState,
+  StreamStatus,
 } from "$lib/types";
 
 /**
@@ -73,4 +74,15 @@ export function onSpotifyState(
   handler: (state: SpotifyState) => void
 ): Promise<UnlistenFn> {
   return listen<SpotifyState>("spotify-state", (event) => handler(event.payload));
+}
+
+/**
+ * Streaming group state (S2): emitted on every transition — start/stop, a child
+ * dying, or a live per-device volume/delay change. The full status is sent each
+ * time.
+ */
+export function onStreamState(
+  handler: (status: StreamStatus) => void
+): Promise<UnlistenFn> {
+  return listen<StreamStatus>("stream-state", (event) => handler(event.payload));
 }

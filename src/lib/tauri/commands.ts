@@ -10,6 +10,9 @@ import type {
   Settings,
   SettingsPatch,
   SpotifyState,
+  StreamSource,
+  StreamStatus,
+  StreamTarget,
 } from "$lib/types";
 
 /**
@@ -133,6 +136,29 @@ export const commands = {
 
   /** Set Connect volume from a 0.0..=1.0 level. */
   spotifySetVolume: (level: number) => invoke<void>("spotify_set_volume", { level }),
+
+  // ---------------------------------------------------------- streaming (S2) --
+
+  /**
+   * Start streaming `source` to every target in sync. For "Play Everywhere" the
+   * source is `{ kind: "spotify" }` — Spotify capture must already be running.
+   */
+  streamStart: (targets: StreamTarget[], source: StreamSource) =>
+    invoke<StreamStatus>("stream_start", { targets, source }),
+
+  /** Stop the active stream (kills every RAOP sender child). Idempotent. */
+  streamStop: () => invoke<StreamStatus>("stream_stop"),
+
+  /** Set one receiver's software volume live (`0.0..=1.0`). */
+  streamSetDeviceVolume: (ip: string, vol: number) =>
+    invoke<StreamStatus>("stream_set_device_volume", { ip, vol }),
+
+  /** Set one receiver's software delay in milliseconds (trims room-to-room skew). */
+  streamSetDeviceDelay: (ip: string, ms: number) =>
+    invoke<StreamStatus>("stream_set_device_delay", { ip, ms }),
+
+  /** Current streaming status (idle when nothing is playing). */
+  streamStatus: () => invoke<StreamStatus>("stream_status"),
 };
 
 /** True when the rejection is the Rust `{ code, message }` envelope. */

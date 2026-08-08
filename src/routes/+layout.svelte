@@ -10,6 +10,7 @@
   import { session } from "$lib/stores/session.svelte";
   import { devices } from "$lib/stores/devices.svelte";
   import { scan } from "$lib/stores/scan.svelte";
+  import { stream } from "$lib/stores/stream.svelte";
   import { toasts } from "$lib/stores/toasts.svelte";
   import { theme } from "$lib/stores/theme.svelte";
   import { commands } from "$lib/tauri/commands";
@@ -46,6 +47,7 @@
     return () => {
       devices.stop();
       scan.stop();
+      stream.stop();
       unlistenFocus?.();
     };
   });
@@ -59,6 +61,7 @@
     if (session.loggedIn) {
       void devices.start();
       void scan.start();
+      void stream.start();
     }
   });
 
@@ -127,6 +130,14 @@
           )
             ? 'text-white'
             : 'text-slate-400'}">Devices</a
+        >
+        <a
+          href="/stream"
+          class="rounded px-2 py-1 transition-colors hover:bg-[var(--color-surface-raised)] {path.startsWith(
+            '/stream'
+          )
+            ? 'text-white'
+            : 'text-slate-400'}">Play Everywhere</a
         >
         <a
           href="/settings"
