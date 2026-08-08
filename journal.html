@@ -60,7 +60,7 @@
         <h1>MusicSync — Project Journal</h1>
         <div class="sub">
           Arylic LP10 LAN multiroom controller — Tauri v2 + SvelteKit (Svelte 5) + Rust, Linkplay HTTP API.
-          &nbsp;·&nbsp; Last updated: <strong>2026-08-08</strong> &nbsp;·&nbsp; Current: <span class="pill">Infra + M1–M3 software done · next: <strong>FR-23 hardware spike</strong>, then M4 grouping</span>
+          &nbsp;·&nbsp; Last updated: <strong>2026-08-08</strong> &nbsp;·&nbsp; Current: <span class="pill">FR-23 spike done — <strong>LP10 speaks LibreWireless Luci, not Linkplay</strong>. Pivoting device layer to Luci; M2/M4/M5 rebasing. Discovery + per-device control + grouping grammar all proven live on real hardware.</span>
         </div>
         <div class="howto">
           <strong>How to use.</strong> Living source of truth for progress &amp; focus (referenced from <code>CLAUDE.md</code>).
@@ -109,12 +109,13 @@
       </details>
 
       <details class="phase" open>
-        <summary><span class="badge status done">done</span><span class="title"><h3>M2 — Linkplay client, manual add, device list</h3> <small>FR-5..9, part of FR-18/19 · software 2026-08-08, spike pending</small></span></summary>
+        <summary><span class="badge status wip">wip</span><span class="title"><h3>M2 — Device client (REBASE: Linkplay → Luci)</h3> <small>FR-5..9 · HTTP client built, must re-base onto Luci per spike</small></span></summary>
         <div class="body">
           <ul class="tasks">
             <li><span class="badge status done">done</span><span class="t">Typed client (<code>LinkplayCommand::to_query()</code> single chokepoint), tolerant serde models, hex Title/Artist decode</span></li>
             <li><span class="badge status done">done</span><span class="t">Per-device poller (3 s fixed v1, offline backoff 5/10/30 s), <code>device-updated</code>/<code>device-offline</code> events</span></li>
             <li><span class="badge status done">done</span><span class="t">Add by IP, rename (+push to device), remove, detail view with raw-JSON debug pane; Devices page + dashboard cards</span></li>
+            <li><span class="badge status todo">todo</span><span class="t"><strong>REBASE:</strong> replace HTTP <code>to_query()</code> with Luci codec (TLS 7777 + 10-byte header/JSON + MessageBox), DDMS M-SEARCH discovery, wired/Wi-Fi + group-state from M-SEARCH; keep UPnP :49494 as per-device fallback</span></li>
             <li><span class="badge status blocked">blocked</span><span class="t"><strong>FR-23 hardware spike</strong> — run <code>docs/firmware-notes.md</code> checklist against a real LP10 (join-variant, slave Ungroup semantics, Spotify Connect detach behavior, emoji rename). Gates M4/M5 defaults. <em>Needs: an LP10 powered on + user present.</em></span></li>
           </ul>
         </div>
@@ -180,6 +181,7 @@
       <p class="note">2026-08-07 — reqwest built with <code>.no_proxy()</code> and no TLS features: all device traffic is plain LAN HTTP; a system proxy must never swallow it.</p>
       <p class="note">2026-08-07 — Remove-password keeps the profile (hash → None) instead of un-configuring, so the wizard doesn't re-trigger.</p>
       <p class="note">2026-08-08 — Group Guard defaults stay unfrozen until the FR-23 spike lands; <code>to_query()</code> and role derivation are the two cheap-to-rewrite chokepoints.</p>
+      <p class="note">2026-08-08 — <strong>FR-23 spike / architecture pivot:</strong> real LP10s (firmware AR241CE_9243, LibreWireless LS6 module) have NO Linkplay httpapi (404). Native control = LibreWireless <strong>Luci</strong> (TCP 7777 + mutual TLS 1.2, client cert from the open-source LSCommunicator SDK, 10-byte header + JSON, MessageBox command catalog). Proven live: TLS auth, DevInfo, per-device volume read/write, DDMS M-SEARCH topology (State/NETMODE wired-vs-wifi/MRAMode). Grouping = Luci cmd 100 ASCII verbs (SETMASTER/SETSLAVE/JOINALL/SETFREE) + DDMS ooh-master/groupid/ssid dance — grammar recovered, full formation to build+audio-verify in M4. Details in <code>docs/firmware-notes.md</code>. UPnP (49494) works as a fallback for per-device control.</p>
 
       <div class="editable">
         <h3>Notes &amp; priorities (user-owned — Claude reads, never overwrites)</h3>
