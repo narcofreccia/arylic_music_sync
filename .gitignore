@@ -52,3 +52,7 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# LibreWireless Luci client cert — PUBLIC (from open-source LSCommunicator SDK), safe to commit
+!src-tauri/src/luci/assets/librewireless_client_cert.pem
+!src-tauri/src/luci/assets/librewireless_client_key.pem
