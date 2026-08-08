@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import DeviceCard from "$lib/components/device/DeviceCard.svelte";
+  import NetBadge from "$lib/components/device/NetBadge.svelte";
   import { devices } from "$lib/stores/devices.svelte";
-  import { scan } from "$lib/stores/scan.svelte";
+  import { scan, candidateKey } from "$lib/stores/scan.svelte";
   import { commands, errorMessage } from "$lib/tauri/commands";
   import type { DeviceCandidate, ScanPhase } from "$lib/types";
 
@@ -28,11 +29,11 @@
   /** The saved default (FR-20), shown as the placeholder when it is set. */
   let savedSubnet = $state<string | null>(null);
   /** Per-candidate add state, so one slow device doesn't disable every row. */
-  let addingUuid = $state<string | null>(null);
+  let addingKey = $state<string | null>(null);
   let candidateError = $state("");
 
   const PHASE_LABEL: Record<ScanPhase, string> = {
-    mdns: "Listening for mDNS announcements",
+    ddms: "Listening for DDMS speakers",
     ssdp: "Asking over SSDP",
     sweep: "Sweeping the subnet",
   };
@@ -50,7 +51,7 @@
    */
   const cidrValid = $derived(cidr.trim() === "" || /^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/.test(cidr.trim()));
 
-  const busy = $derived(scan.running || addingUuid !== null);
+  const busy = $derived(scan.running || addingKey !== null);
 
   onMount(async () => {
     try {
@@ -73,15 +74,15 @@
 
   /** Candidates go through the normal add path (FR-5), never straight to disk. */
   async function addCandidate(candidate: DeviceCandidate) {
-    addingUuid = candidate.uuid;
+    addingKey = candidateKey(candidate);
     candidateError = "";
     try {
       await devices.add(candidate.ip);
-      scan.markAdded(candidate.uuid);
+      scan.markAdded(candidate);
     } catch (e) {
       candidateError = errorMessage(e, `Could not add ${candidate.ip}.`);
     } finally {
-      addingUuid = null;
+      addingKey = null;
     }
   }
 
@@ -276,18 +277,20 @@
         </div>
 
         <ul class="mt-3 flex flex-col gap-2">
-          {#each scan.found as candidate (candidate.uuid)}
-            {@const added = candidate.alreadyAdded || scan.added[candidate.uuid]}
+          {#each scan.found as candidate (candidateKey(candidate))}
+            {@const key = candidateKey(candidate)}
+            {@const added = candidate.alreadyAdded || scan.added[key]}
             <li
               class="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-3 py-2"
             >
               <span class="text-sm text-slate-200">{candidate.name || candidate.ip}</span>
               <span class="font-mono text-xs text-slate-500">{candidate.ip}</span>
+              <NetBadge netMode={candidate.netMode} wifiBand={candidate.wifiBand} />
+              {#if candidate.model}
+                <span class="text-xs text-slate-500">{candidate.model}</span>
+              {/if}
               {#if candidate.firmware}
                 <span class="text-xs text-slate-500">fw {candidate.firmware}</span>
-              {/if}
-              {#if candidate.rssi !== null}
-                <span class="text-xs text-slate-500">{candidate.rssi} dBm</span>
               {/if}
 
               <div class="ml-auto">
@@ -297,10 +300,10 @@
                   <button
                     type="button"
                     onclick={() => addCandidate(candidate)}
-                    disabled={addingUuid !== null}
+                    disabled={addingKey !== null}
                     class="rounded-md border border-[var(--color-border-subtle)] px-3 py-1 text-xs text-slate-200 transition-colors hover:bg-[var(--color-surface-raised)] disabled:opacity-50"
                   >
-                    {addingUuid === candidate.uuid ? "Adding…" : "Add"}
+                    {addingKey === key ? "Adding…" : "Add"}
                   </button>
                 {/if}
               </div>

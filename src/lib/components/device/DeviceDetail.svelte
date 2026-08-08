@@ -37,30 +37,31 @@
   // when the device is offline.
   const shown = $derived(detail?.snapshot ?? device);
 
+  const netLabel = $derived(
+    shown.netMode === "ethernet"
+      ? "Wired (Ethernet)"
+      : shown.netMode === "wifi"
+        ? `Wi-Fi${shown.wifiBand ? ` (${shown.wifiBand})` : ""}`
+        : "—"
+  );
+
   const rows = $derived([
     ["IP address", shown.ip],
     ["UUID", shown.uuid],
+    ["Model", shown.model || "—"],
     ["Firmware", shown.firmware || "—"],
-    ["Hardware", shown.hardware || "—"],
-    ["Project", shown.project || "—"],
-    ["MCU", shown.mcuVer || "—"],
-    ["Wi-Fi RSSI", shown.rssi === null ? "—" : `${shown.rssi} dBm`],
-    ["SSID", shown.ssid || "—"],
-    [
-      "Role",
-      shown.role.kind === "master"
-        ? `Master of ${shown.role.slaveUuids.length}`
-        : shown.role.kind === "slave"
-          ? `Slave of ${shown.role.masterIp ?? shown.role.masterUuid ?? "unknown master"}`
-          : "Solo"
-    ],
-    ["Group name", shown.groupName || "—"],
+    ["Connection", netLabel],
+    ["Role", shown.role.charAt(0).toUpperCase() + shown.role.slice(1)],
+    ["Group id", shown.groupId ?? "—"],
+    ["Volume", shown.volume === null ? "—" : `${shown.volume}${shown.mute ? " (muted)" : ""}`],
+    ["Source", shown.source === null ? "—" : `${shown.source}`],
+    ["Play state", shown.playState === null ? "—" : shown.playState === 1 ? "Playing" : "Stopped"],
     ["Last seen", shown.online ? "now" : sinceLabel(shown.lastSeen)]
   ] as const);
 
-  const raw = $derived(
-    detail ? JSON.stringify({ statusEx: detail.extra, playerStatus: detail.playerExtra }, null, 2) : ""
-  );
+  const track = $derived(shown.track);
+
+  const raw = $derived(detail ? JSON.stringify(detail.raw, null, 2) : "");
 </script>
 
 <div class="border-t border-[var(--color-border-subtle)] px-4 py-4 text-sm">
@@ -77,20 +78,15 @@
     {/each}
   </dl>
 
-  {#if shown.slaves.length > 0}
-    <h4 class="mt-4 text-xs font-medium tracking-wide text-slate-400 uppercase">Group members</h4>
-    <ul class="mt-2 flex flex-col gap-1">
-      {#each shown.slaves as slave (slave.uuid || slave.ip)}
-        <li class="text-xs text-slate-300">
-          {slave.name || slave.ip}
-          <span class="text-slate-500">· {slave.ip} · vol {slave.volume}{slave.mute ? " · muted" : ""}</span>
-        </li>
-      {/each}
-    </ul>
+  {#if track && (track.title || track.artist || track.album)}
+    <h4 class="mt-4 text-xs font-medium tracking-wide text-slate-400 uppercase">Now playing</h4>
+    <p class="mt-1 text-xs text-slate-300">
+      {[track.title, track.artist, track.album].filter(Boolean).join(" · ")}
+    </p>
   {/if}
 
   {#if detail}
-    <!-- Unmodelled fields, verbatim: the input for docs/firmware-notes.md. -->
+    <!-- Raw Luci/DDMS payloads, verbatim: the input for docs/firmware-notes.md. -->
     <button
       type="button"
       onclick={() => (showRaw = !showRaw)}

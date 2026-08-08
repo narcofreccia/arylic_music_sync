@@ -32,16 +32,16 @@ anyhow = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "net"] }
 futures-util = "0.3"
 
-# Linkplay HTTP API client (plain http:// on the LAN — no TLS backend needed).
-reqwest = { version = "0.12", default-features = false, features = ["json"] }
-# Linkplay quirks: hex-encoded track metadata, URL-encoded setDeviceName.
-hex = "0.4"
-percent-encoding = "2"
+# Luci control protocol (LibreWireless) — TCP 7777 + TLS 1.2, mutual auth with an
+# embedded client cert. The device's own cert is self-signed and not validated
+# (a dangerous verifier accepts it), matching the LSCommunicator SDK.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+rustls-pemfile = "2"
+rustls-pki-types = "1"
 
-# Discovery: mDNS browse + subnet sweep over the local interfaces.
-mdns-sd = "0.11"
+# Discovery: DDMS M-SEARCH / SSDP + subnet-sweep CIDR maths.
 ipnet = "2"
-if-addrs = "0.13"
 
 # Local profile auth (FR-1): Argon2 password hash, no cloud account server.
 argon2 = "0.5"

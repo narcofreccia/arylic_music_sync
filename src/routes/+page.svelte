@@ -1,6 +1,7 @@
 <script lang="ts">
   import RoleBadge from "$lib/components/device/RoleBadge.svelte";
   import SourceBadge from "$lib/components/device/SourceBadge.svelte";
+  import NetBadge from "$lib/components/device/NetBadge.svelte";
   import { devices } from "$lib/stores/devices.svelte";
   import { sinceLabel } from "$lib/format";
 
@@ -60,21 +61,23 @@
           </div>
 
           <div class="mt-2 flex flex-wrap items-center gap-2">
+            {#if device.online}
+              <NetBadge netMode={device.netMode} wifiBand={device.wifiBand} />
+            {/if}
             <RoleBadge role={device.role} />
-            {#if device.player}
-              <SourceBadge source={device.player.source} />
+            {#if device.online && device.source !== null}
+              <SourceBadge source={device.source} />
             {/if}
           </div>
 
           <p class="mt-2 truncate text-xs text-slate-500">
             {#if !device.online}
               Offline · {sinceLabel(device.lastSeen)}
-            {:else if device.player}
-              Volume {device.player.vol}{device.player.mute ? " · muted" : ""}
-              {#if device.player.status === "play" && (device.player.title || device.player.artist)}
-                · ♪ {[device.player.title, device.player.artist].filter(Boolean).join(" — ")}
-              {/if}
-            {:else if device.role.kind === "slave"}
+            {:else if device.playState === 1 && (device.track?.title || device.track?.artist)}
+              ♪ {[device.track?.title, device.track?.artist].filter(Boolean).join(" — ")}
+            {:else if device.volume !== null}
+              Volume {device.volume}{device.mute ? " · muted" : ""}
+            {:else if device.role === "slave"}
               Following the group master
             {:else}
               Online

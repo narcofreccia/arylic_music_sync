@@ -1,31 +1,28 @@
 <script lang="ts">
-  import type { SourceMode } from "$lib/types";
+  // Active input per device, from Luci `CURRSOURCE`. The integer→name mapping for
+  // the LP10 is not yet field-verified, so a known code gets a label and anything
+  // else is shown as its raw number rather than guessed at.
 
-  // Active input per device (FR-19). Unknown firmware codes arrive as
-  // "mode <n>" from Rust and are shown as-is rather than hidden.
+  let { source }: { source: number | null } = $props();
 
-  let { source }: { source: SourceMode } = $props();
-
-  const LABELS: Record<string, string> = {
-    idle: "Idle",
-    airplay: "AirPlay",
-    dlna: "DLNA",
-    network: "Wi-Fi stream",
-    usb: "USB",
-    spotify: "Spotify Connect",
-    "line-in": "Line-in",
-    bluetooth: "Bluetooth",
-    optical: "Optical",
-    "line-in2": "Line-in 2",
-    "usb-dac": "USB DAC",
-    follower: "Following master"
+  const LABELS: Record<number, string> = {
+    0: "Idle",
+    1: "AirPlay",
+    2: "DLNA",
+    3: "Wi-Fi stream",
+    4: "Bluetooth",
+    5: "Line-in",
+    6: "Optical",
+    10: "Network"
   };
 
-  const label = $derived(LABELS[source] ?? source);
+  const label = $derived(source === null ? "" : (LABELS[source] ?? `Source ${source}`));
 </script>
 
-<span
-  class="rounded-full border border-[var(--color-border-subtle)] px-2 py-0.5 text-[11px] text-slate-400"
->
-  {label}
-</span>
+{#if label}
+  <span
+    class="rounded-full border border-[var(--color-border-subtle)] px-2 py-0.5 text-[11px] text-slate-400"
+  >
+    {label}
+  </span>
+{/if}

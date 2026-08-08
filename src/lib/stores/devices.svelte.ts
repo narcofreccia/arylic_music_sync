@@ -30,9 +30,9 @@ class Devices {
   );
 
   online = $derived(this.list.filter((d) => d.online));
-  masters = $derived(this.list.filter((d) => d.role.kind === "master"));
-  /** Everything currently in a group, master or slave (FR-13's topology input). */
-  grouped = $derived(this.list.filter((d) => d.role.kind !== "solo"));
+  masters = $derived(this.list.filter((d) => d.role === "master"));
+  /** Everything currently in a group, master or slave (topology input for R2). */
+  grouped = $derived(this.list.filter((d) => d.role !== "solo"));
   count = $derived(this.list.length);
 
   #started = false;

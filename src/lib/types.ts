@@ -21,105 +21,77 @@ export interface AppErrorPayload {
 /** Persisted device entry (FR-5/FR-6). The UUID is the identity, not the IP. */
 export interface SavedDevice {
   uuid: string;
+  usn: string;
   ip: string;
   alias: string | null;
+  net_mode: string | null;
   last_seen: number | null;
   pinned_manual: boolean;
 }
 
-/**
- * Group role (FR-9/FR-13), derived on the Rust side from `getStatusEx` +
- * `multiroom:getSlaveList`. Discriminated on `kind`.
- */
-export type DeviceRole =
-  | { kind: "solo" }
-  | { kind: "master"; slaveUuids: string[] }
-  | { kind: "slave"; masterUuid: string | null; masterIp: string | null };
+/** Group role, read from the DDMS `State` banner. R2 acts on it; R1 shows it. */
+export type Role = "solo" | "master" | "slave";
 
-/**
- * Active input (FR-19). The listed values are the codes we map; anything else
- * arrives as `"mode <n>"`, so the union stays open on purpose.
- */
-export type SourceMode =
-  | "idle"
-  | "airplay"
-  | "dlna"
-  | "network"
-  | "usb"
-  | "spotify"
-  | "line-in"
-  | "bluetooth"
-  | "optical"
-  | "line-in2"
-  | "usb-dac"
-  | "follower"
-  | (string & {});
+/** Wired vs Wi-Fi, from the device's `DevInfo` MACs + DDMS `NETMODE`. */
+export type NetMode = "ethernet" | "wifi";
 
-/** Playback state from `getPlayerStatus` (FR-18). */
-export interface PlayerInfo {
-  /** `play` | `pause` | `stop` | `load`. */
-  status: string;
-  /** Raw Linkplay mode code, kept for the debug pane. */
-  mode: number;
-  source: SourceMode;
-  vol: number;
-  mute: boolean;
-  /** Position/length in ms. */
-  curpos: number;
-  totlen: number;
+/** Now-playing metadata (best-effort from `TRACK_INFO` / `GETPLAYDURATION`). */
+export interface Track {
   title: string;
   artist: string;
   album: string;
-}
-
-/** A group member as reported by the master. */
-export interface SlaveInfo {
-  uuid: string;
-  name: string;
-  ip: string;
-  volume: number;
-  mute: boolean;
+  /** Total length in ms, when known. */
+  durationMs: number | null;
+  /** Current position in ms (from `GETPLAYDURATION` pushes), when known. */
+  positionMs: number | null;
 }
 
 /** Live per-device state — the payload of `device-updated`/`device-offline`. */
 export interface DeviceSnapshot {
   uuid: string;
   ip: string;
-  /** Name reported by the device itself. */
+  /** Name reported by the device (DDMS `DeviceName` / `DevName`). */
   name: string;
   /** Local override (FR-7). */
   alias: string | null;
   /** Alias, else device name, else IP — what the UI prints. */
   displayName: string;
   online: boolean;
-  role: DeviceRole;
-  groupName: string;
+  /** `ethernet` | `wifi`, when known. */
+  netMode: NetMode | null;
+  /** `ETH` | `2G` | `5G`, verbatim. */
+  wifiBand: string | null;
+  model: string;
   firmware: string;
-  hardware: string;
-  project: string;
-  mcuVer: string;
-  rssi: number | null;
-  ssid: string;
-  /** Absent while the device is a follower, idle-unreadable, or offline. */
-  player: PlayerInfo | null;
-  slaves: SlaveInfo[];
+  role: Role;
+  /** DDMS zone id when grouped (R2 fills this in fully). */
+  groupId: string | null;
+  /** The master this device follows, when a slave. */
+  masterUuid: string | null;
+  volume: number | null;
+  mute: boolean;
+  /** Raw `CURRSOURCE` integer. */
+  source: number | null;
+  /** Raw `PLAY_STATE` integer (`0` stopped / `1` playing). */
+  playState: number | null;
+  track: Track | null;
   /** Unix ms of the last successful poll. */
   lastSeen: number | null;
+  /** Verbatim raw Luci/DDMS payloads, for the debug pane. */
+  raw: Record<string, unknown>;
 }
 
-/** Device detail view (FR-9), including the unmodelled raw fields. */
+/** Device detail view (FR-9), including the raw payloads. */
 export interface DeviceDetail {
   snapshot: DeviceSnapshot;
-  /** `getStatusEx` keys we don't model — the debug pane. */
-  extra: Record<string, unknown>;
-  /** `getPlayerStatus` keys we don't model. */
-  playerExtra: Record<string, unknown>;
+  /** Raw Luci/DDMS payloads keyed by source — the debug pane. */
+  raw: Record<string, unknown>;
 }
 
 // ------------------------------------------------------------- discovery --
 
 /** Which discovery strategy a `scan-progress` event is reporting on (FR-4). */
-export type ScanPhase = "mdns" | "ssdp" | "sweep";
+export type ScanPhase = "ddms" | "ssdp" | "sweep";
 
 /** `scan` arguments. `sweep` defaults on; `cidr` null = settings, then auto. */
 export interface ScanOptions {
@@ -128,17 +100,22 @@ export interface ScanOptions {
 }
 
 /**
- * A device found by a scan — confirmed via `getStatusEx`, but *not* saved.
- * Adding one goes through the normal `add_device` path (FR-5).
+ * A device found by a scan — confirmed via a DDMS banner or Luci `DevInfo`, but
+ * *not* saved. Adding one goes through the normal `add_device` path (FR-5).
  */
 export interface DeviceCandidate {
+  /** UPnP UDN uuid — the stable key (may be empty when only Luci/DDMS saw it). */
   uuid: string;
+  /** DDMS `USN` (a MAC), the fallback key. */
+  usn: string;
   ip: string;
   /** The device's own name; candidates have no local alias yet. */
   name: string;
+  model: string;
   firmware: string;
-  rssi: number | null;
-  /** Already in the saved list — matched on UUID, so a DHCP move still counts. */
+  netMode: NetMode | null;
+  wifiBand: string | null;
+  /** Already saved — matched on uuid, then usn, then ip. */
   alreadyAdded: boolean;
 }
 

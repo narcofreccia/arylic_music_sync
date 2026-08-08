@@ -43,14 +43,19 @@ pub struct AuthConfig {
 // (or hand-edited) must degrade, never fail the whole load.
 #[serde(default)]
 pub struct SavedDevice {
+    /// UPnP UDN uuid — the stable identity across DHCP leases.
     pub uuid: String,
+    /// DDMS `USN` (a MAC), a fallback identity when no UPnP uuid was seen.
+    pub usn: String,
     pub ip: String,
     /// Local friendly name (FR-7); `None` = show the device's own name.
     pub alias: Option<String>,
+    /// Last known transport (`ethernet` | `wifi`), for the offline card badge.
+    pub net_mode: Option<String>,
     /// Unix ms of the last successful contact, so an offline device can still
     /// say when it was last around.
     pub last_seen: Option<i64>,
-    /// Added by hand (FR-5) rather than discovered — M3's scan must not prune
+    /// Added by hand (FR-5) rather than discovered — the scan must not prune
     /// these just because they didn't answer a sweep.
     pub pinned_manual: bool,
 }

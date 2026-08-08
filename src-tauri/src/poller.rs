@@ -1,97 +1,47 @@
-//! Per-device status poller (brief §7, FR-6/FR-18/FR-19).
+//! Per-device status poller, rebased onto Luci.
 //!
-//! One tokio task per device, never a single loop over all of them: NFR-3 wants
-//! a dead speaker to cost only its own 2 s timeout, not to stall everyone
-//! else's cycle. Each task owns its failure count and its backoff.
+//! One tokio task per device (never a single loop over all of them), so a dead
+//! speaker costs only its own timeout. Each task owns:
 //!
-//! The tasks are the only writers of the snapshot cache; commands read it, and
-//! the frontend mirrors it through `device-updated` / `device-offline` events.
-//! M5's Group Guard hooks in here (role changes are already computed per cycle).
+//! * one **persistent `LuciClient`** with `REG_ASYNC_EVENTS` — reconnected with
+//!   5/10/30 s backoff when it drops;
+//! * a periodic read of VOLUME / PLAY_STATE / CURRSOURCE / TRACK_INFO, plus a
+//!   DDMS M-SEARCH for topology (State / NETMODE / model);
+//! * its own failure streak — offline after 3 consecutive failed cycles.
+//!
+//! The tasks are the only writers of the snapshot cache; commands read it and
+//! the frontend mirrors it through `device-updated` / `device-offline`.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter, Manager};
+use serde_json::{json, Map, Value};
 use tauri::async_runtime::JoinHandle;
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Notify;
 
-use crate::error::AppResult;
-use crate::linkplay::client::{LinkplayClient, LinkplayCommand};
-use crate::linkplay::models::{
-    derive_role, DeviceRole, DeviceSnapshot, PlayerStatus, SlaveList, StatusEx,
-};
+use crate::luci::client::LuciClient;
+use crate::luci::messagebox::MessageBox;
+use crate::luci::model::{self, DdmsBanner, DevInfo, DeviceSnapshot, NetMode, Role, Track};
 use crate::state::AppState;
 use crate::store;
 
 /// Snapshot changed (including the offline transition).
 pub const EVENT_DEVICE_UPDATED: &str = "device-updated";
-/// A device just crossed the offline threshold — a notification-worthy edge,
-/// emitted once per transition rather than every failed cycle.
+/// A device just crossed the offline threshold — emitted once per transition.
 pub const EVENT_DEVICE_OFFLINE: &str = "device-offline";
 
-/// Consecutive failed cycles before a device is called offline. A single miss
-/// is normal on Wi-Fi (a stream burst, a retransmit) and must not flap the UI.
+/// Consecutive failed cycles before a device is called offline.
 const OFFLINE_AFTER_FAILURES: u32 = 3;
-
-/// Retry cadence once a device is offline — polling a dead unit every 3 s is
-/// pure noise. Reset to the normal interval on the first success.
+/// Reconnect/retry cadence once offline.
 const OFFLINE_BACKOFF: [u64; 3] = [5_000, 10_000, 30_000];
-
-/// Floor for the configurable interval; below this the LAN chatter outweighs
-/// any responsiveness gain.
+/// Floor for the configurable poll interval.
 const MIN_POLL_MS: u64 = 1_000;
+/// DDMS topology probe budget per cycle.
+const DDMS_TIMEOUT: Duration = Duration::from_millis(1_500);
 
-/// One device's poll round.
-pub struct PollResult {
-    pub snapshot: DeviceSnapshot,
-    pub status: StatusEx,
-    pub player: Option<PlayerStatus>,
-}
-
-/// A single poll round against one device.
-///
-/// Which calls are made depends on the role we can already infer, so a slave
-/// costs one request instead of three: its transport is the master's, and it
-/// has no slave list of its own.
-pub async fn poll_once(
-    client: &LinkplayClient,
-    ip: &str,
-    alias: Option<String>,
-) -> AppResult<PollResult> {
-    let status: StatusEx = client.send_json(ip, &LinkplayCommand::GetStatusEx).await?;
-
-    // Provisional role from getStatusEx alone: enough to know whether the extra
-    // two calls are worth making.
-    let following = matches!(derive_role(&status, None, None), DeviceRole::Slave { .. });
-
-    let player = if following {
-        None
-    } else {
-        // A device that answers getStatusEx but chokes on getPlayerStatus is
-        // still online — degrade to "no playback info" instead of offline.
-        client
-            .send_json::<PlayerStatus>(ip, &LinkplayCommand::GetPlayerStatus)
-            .await
-            .map_err(|e| log::debug!("{ip}: getPlayerStatus failed: {e}"))
-            .ok()
-    };
-
-    let slaves = if following {
-        None
-    } else {
-        client
-            .send_json::<SlaveList>(ip, &LinkplayCommand::GetSlaveList)
-            .await
-            .map_err(|e| log::debug!("{ip}: getSlaveList failed: {e}"))
-            .ok()
-    };
-
-    let snapshot = DeviceSnapshot::build(ip, alias, &status, player.as_ref(), slaves.as_ref(), now_ms());
-    Ok(PollResult { snapshot, status, player })
-}
-
-/// Unix milliseconds; `0` if the clock is before the epoch (it isn't).
+/// Unix milliseconds.
 pub fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -101,12 +51,10 @@ pub fn now_ms() -> i64 {
 
 struct PollHandle {
     task: JoinHandle<()>,
-    /// Wakes the loop early (`refresh_device`, or after a rename).
     kick: std::sync::Arc<Notify>,
 }
 
-/// Owns the poll tasks and the last-known state of every device. Lives in
-/// `AppState`.
+/// Owns the poll tasks and the last-known state of every device.
 #[derive(Default)]
 pub struct Poller {
     tasks: Mutex<HashMap<String, PollHandle>>,
@@ -118,8 +66,6 @@ impl Poller {
         self.snapshots.read().expect("snapshot lock poisoned").get(uuid).cloned()
     }
 
-    /// Publish a snapshot without going through a poll cycle (`add_device`
-    /// already has a fresh one).
     pub fn put(&self, snapshot: DeviceSnapshot) {
         self.snapshots
             .write()
@@ -131,11 +77,9 @@ impl Poller {
         self.snapshots.write().expect("snapshot lock poisoned").remove(uuid);
     }
 
-    /// Start polling a device. Idempotent: an existing task for `uuid` is
-    /// replaced, so a re-added device never ends up with two loops.
+    /// Start polling a device. Idempotent: an existing task is replaced.
     pub fn start(&self, app: &AppHandle, uuid: String, ip: String) {
-        self.stop(&uuid);
-
+        self.stop_task(&uuid);
         let kick = std::sync::Arc::new(Notify::new());
         let task = tauri::async_runtime::spawn(run(app.clone(), uuid.clone(), ip, kick.clone()));
         self.tasks
@@ -146,13 +90,17 @@ impl Poller {
 
     /// Stop polling and drop the cached snapshot.
     pub fn stop(&self, uuid: &str) {
-        if let Some(handle) = self.tasks.lock().expect("poll task lock poisoned").remove(uuid) {
-            handle.task.abort();
-        }
+        self.stop_task(uuid);
         self.forget(uuid);
     }
 
-    /// Wake a device's loop now (FR-6 manual refresh). False when unknown.
+    fn stop_task(&self, uuid: &str) {
+        if let Some(handle) = self.tasks.lock().expect("poll task lock poisoned").remove(uuid) {
+            handle.task.abort();
+        }
+    }
+
+    /// Wake a device's loop now (manual refresh). False when unknown.
     pub fn kick(&self, uuid: &str) -> bool {
         match self.tasks.lock().expect("poll task lock poisoned").get(uuid) {
             Some(handle) => {
@@ -164,70 +112,196 @@ impl Poller {
     }
 }
 
-/// The per-device loop. Owns its failure streak and backoff so devices fail
-/// independently (NFR-3).
+/// A device's live playback read (via Luci) plus its DDMS banner.
+pub(crate) struct Reading {
+    pub(crate) volume: Option<u8>,
+    pub(crate) mute: bool,
+    pub(crate) source: Option<i32>,
+    pub(crate) play_state: Option<i32>,
+    pub(crate) track: Option<Track>,
+    pub(crate) banner: Option<DdmsBanner>,
+    pub(crate) raw: Map<String, Value>,
+}
+
+/// One periodic read against a connected device. Any hard Luci failure bubbles
+/// up (the caller drops the client and reconnects); soft failures degrade the
+/// affected field to `None`.
+pub(crate) async fn read_once(client: &LuciClient, ip: &str, position_ms: Option<u64>) -> crate::error::AppResult<Reading> {
+    let mut raw = Map::new();
+
+    // VOLUME is the liveness probe — a failure here means the connection is bad.
+    let volume_raw = client.read(MessageBox::Volume).await?;
+    raw.insert("volume".into(), json!(volume_raw));
+    let volume = model::parse_volume(&volume_raw);
+
+    let mute = match client.read(MessageBox::MuteUnmute).await {
+        Ok(p) => {
+            raw.insert("mute".into(), json!(p));
+            model::parse_mute(&p)
+        }
+        Err(e) => {
+            log::debug!("{ip}: mute read failed: {e}");
+            false
+        }
+    };
+
+    let play_state = client.read(MessageBox::PlayState).await.ok().map(|p| {
+        raw.insert("playState".into(), json!(p));
+        model::parse_play_state(&p)
+    }).flatten();
+
+    let source = client.read(MessageBox::CurrSource).await.ok().map(|p| {
+        raw.insert("currSource".into(), json!(p));
+        model::parse_source(&p)
+    }).flatten();
+
+    let mut track = client.read(MessageBox::TrackInfo).await.ok().and_then(|p| {
+        raw.insert("trackInfo".into(), json!(p));
+        let t = Track::parse_track_info(&p);
+        (!t.is_empty()).then_some(t)
+    });
+    if let Some(t) = track.as_mut() {
+        t.position_ms = position_ms;
+    } else if position_ms.is_some() {
+        track = Some(Track { position_ms, ..Track::default() });
+    }
+
+    // DDMS banner for topology / netmode / model — best effort.
+    let banner = crate::discovery::ddms_probe(ip, DDMS_TIMEOUT).await.map(|text| {
+        raw.insert("ddms".into(), json!(text));
+        DdmsBanner::parse(&text)
+    });
+
+    Ok(Reading { volume, mute, source, play_state, track, banner, raw })
+}
+
+/// Assemble a snapshot from cached identity + a fresh reading. Pure, so it is
+/// unit-testable.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_snapshot(
+    uuid: &str,
+    ip: &str,
+    alias: Option<String>,
+    dev_info: Option<&DevInfo>,
+    dev_name: &str,
+    reading: &Reading,
+    last_seen: i64,
+) -> DeviceSnapshot {
+    let banner = reading.banner.as_ref();
+
+    let name = banner
+        .and_then(|b| b.device_name())
+        .map(str::to_string)
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| dev_name.trim().to_string());
+
+    let firmware = dev_info
+        .map(|i| i.versioninfo.devicefwversion.clone())
+        .filter(|f| !f.is_empty())
+        .or_else(|| banner.and_then(|b| b.firmware()).map(str::to_string))
+        .unwrap_or_default();
+
+    let model = banner.and_then(|b| b.model()).map(str::to_string).unwrap_or_default();
+    let net_mode = banner.and_then(|b| b.net_mode());
+    let wifi_band = banner.and_then(|b| b.wifi_band()).map(str::to_string);
+    let role = banner.map(DdmsBanner::role).unwrap_or(Role::Solo);
+    let group_id = banner.and_then(|b| b.get("USN")).map(str::to_string).filter(|_| role != Role::Solo);
+
+    let mut raw = reading.raw.clone();
+    if let Some(info) = dev_info {
+        raw.insert("devInfo".into(), serde_json::to_value(info).unwrap_or(Value::Null));
+    }
+
+    let mut snapshot = DeviceSnapshot {
+        uuid: uuid.to_string(),
+        ip: ip.to_string(),
+        name,
+        alias,
+        display_name: String::new(),
+        online: true,
+        net_mode,
+        wifi_band,
+        model,
+        firmware,
+        role,
+        group_id,
+        master_uuid: None,
+        volume: reading.volume,
+        mute: reading.mute,
+        source: reading.source,
+        play_state: reading.play_state,
+        track: reading.track.clone(),
+        last_seen: Some(last_seen),
+        raw,
+    };
+    snapshot.refresh_display_name();
+    snapshot
+}
+
+/// The per-device loop. Owns the connection, the failure streak and the backoff.
 async fn run(app: AppHandle, uuid: String, ip: String, kick: std::sync::Arc<Notify>) {
-    let client = app.state::<AppState>().linkplay.clone();
+    let mut client: Option<LuciClient> = None;
+    let mut events: Option<tokio::sync::mpsc::Receiver<crate::luci::LuciEvent>> = None;
+    let mut dev_info: Option<DevInfo> = None;
+    let mut dev_name = String::new();
+    let mut position_ms: Option<u64> = None;
+
     let mut failures = 0u32;
     let mut backoff = 0usize;
-    // The last state we told the frontend about — the emit filter.
     let mut published: Option<DeviceSnapshot> = None;
 
     loop {
         let config = store::get(&app);
-        let alias = config
-            .devices
-            .iter()
-            .find(|d| d.uuid == uuid)
-            .and_then(|d| d.alias.clone());
+        let saved = config.devices.iter().find(|d| d.uuid == uuid);
+        let alias = saved.and_then(|d| d.alias.clone());
         let poll_ms = config.settings.poll_ms.max(MIN_POLL_MS);
 
-        let wait = match poll_once(&client, &ip, alias).await {
-            Ok(result) => {
-                failures = 0;
-                backoff = 0;
-
-                let mut snapshot = result.snapshot;
-                if snapshot.uuid != uuid {
-                    // The saved UUID is this device's identity everywhere else
-                    // (config key, map key, event key). A mismatch means the IP
-                    // was reassigned to another unit — keep the key stable and
-                    // let the user notice the changed name.
-                    if !snapshot.uuid.is_empty() {
-                        log::warn!("{ip} reports uuid {} but is saved as {uuid}", snapshot.uuid);
-                    }
-                    snapshot.uuid = uuid.clone();
+        // (Re)connect if needed. A fresh connection reloads the cached identity.
+        if client.is_none() {
+            match LuciClient::connect(&ip).await {
+                Ok((c, rx)) => {
+                    dev_info = c.read(MessageBox::DevInfo).await.ok().and_then(|p| DevInfo::parse(&p));
+                    dev_name = c.read(MessageBox::DevName).await.unwrap_or_default().trim().to_string();
+                    client = Some(c);
+                    events = Some(rx);
                 }
-
-                publish(&app, &mut published, snapshot, false);
-                poll_ms
+                Err(e) => {
+                    log::debug!("{ip}: Luci connect failed ({failures}/{OFFLINE_AFTER_FAILURES}): {e}");
+                }
             }
-            Err(e) => {
-                failures += 1;
-                log::debug!("{ip}: poll failed ({failures}/{OFFLINE_AFTER_FAILURES}): {e}");
+        }
 
-                if failures >= OFFLINE_AFTER_FAILURES {
-                    // Keep the last-known identity fields so the card stays
-                    // recognisable while it is greyed out.
-                    let mut snapshot = published
-                        .clone()
-                        .unwrap_or_else(|| DeviceSnapshot::offline(&uuid, &ip, None, None));
-                    snapshot.mark_offline();
-                    let was_online = published.as_ref().is_some_and(|p| p.online);
-                    publish(&app, &mut published, snapshot, true);
-
-                    if was_online {
-                        // Persist the last sighting once, on the edge — writing
-                        // it every cycle would hammer settings.json.
-                        persist_last_seen(&app, &uuid);
+        // Drain any pushed events (update the play position).
+        if let Some(rx) = events.as_mut() {
+            while let Ok((mb, _status, payload)) = rx.try_recv() {
+                if mb == MessageBox::GetPlayDuration {
+                    if let Ok(ms) = payload.trim().parse::<u64>() {
+                        position_ms = Some(ms);
                     }
-                    let step = backoff.min(OFFLINE_BACKOFF.len() - 1);
-                    backoff = (backoff + 1).min(OFFLINE_BACKOFF.len() - 1);
-                    OFFLINE_BACKOFF[step]
-                } else {
+                }
+            }
+        }
+
+        let wait = match client.as_ref() {
+            Some(c) => match read_once(c, &ip, position_ms).await {
+                Ok(reading) => {
+                    failures = 0;
+                    backoff = 0;
+                    let net_mode = reading.banner.as_ref().and_then(|b| b.net_mode());
+                    let snapshot = build_snapshot(&uuid, &ip, alias, dev_info.as_ref(), &dev_name, &reading, now_ms());
+                    persist_seen(&app, &uuid, net_mode);
+                    publish(&app, &mut published, snapshot, false);
                     poll_ms
                 }
-            }
+                Err(e) => {
+                    log::debug!("{ip}: read failed: {e}");
+                    // Drop the connection; the next cycle reconnects.
+                    client = None;
+                    events = None;
+                    fail(&app, &uuid, &ip, alias, &mut published, &mut failures, &mut backoff)
+                }
+            },
+            None => fail(&app, &uuid, &ip, alias, &mut published, &mut failures, &mut backoff),
         };
 
         tokio::select! {
@@ -237,16 +311,42 @@ async fn run(app: AppHandle, uuid: String, ip: String, kick: std::sync::Arc<Noti
     }
 }
 
-/// Cache the snapshot and emit — but only when something actually changed.
-/// `DeviceSnapshot: PartialEq` is the diff; it is cheaper and exact where a
-/// serialized hash would only be an approximation of the same test.
+/// Record a failed cycle; publish offline once the threshold is crossed. Returns
+/// the wait before the next attempt.
+fn fail(
+    app: &AppHandle,
+    uuid: &str,
+    ip: &str,
+    alias: Option<String>,
+    published: &mut Option<DeviceSnapshot>,
+    failures: &mut u32,
+    backoff: &mut usize,
+) -> u64 {
+    *failures += 1;
+    if *failures < OFFLINE_AFTER_FAILURES {
+        return MIN_POLL_MS.max(2_000);
+    }
+    let mut snapshot = published
+        .clone()
+        .unwrap_or_else(|| DeviceSnapshot::offline(uuid, ip, alias, None));
+    snapshot.mark_offline();
+    let was_online = published.as_ref().is_some_and(|p| p.online);
+    publish(app, published, snapshot, true);
+    if was_online {
+        persist_seen(app, uuid, None);
+    }
+    let step = (*backoff).min(OFFLINE_BACKOFF.len() - 1);
+    *backoff = (*backoff + 1).min(OFFLINE_BACKOFF.len() - 1);
+    OFFLINE_BACKOFF[step]
+}
+
+/// Cache and emit — but only when something actually changed.
 fn publish(app: &AppHandle, published: &mut Option<DeviceSnapshot>, snapshot: DeviceSnapshot, went_offline: bool) {
     let changed = published.as_ref() != Some(&snapshot);
     app.state::<AppState>().poller.put(snapshot.clone());
     if !changed {
         return;
     }
-
     if let Err(e) = app.emit(EVENT_DEVICE_UPDATED, &snapshot) {
         log::error!("failed to emit {EVENT_DEVICE_UPDATED}: {e}");
     }
@@ -258,11 +358,20 @@ fn publish(app: &AppHandle, published: &mut Option<DeviceSnapshot>, snapshot: De
     *published = Some(snapshot);
 }
 
-fn persist_last_seen(app: &AppHandle, uuid: &str) {
+/// Persist last_seen (and net_mode when known), only on a real change, to avoid
+/// hammering settings.json.
+fn persist_seen(app: &AppHandle, uuid: &str, net_mode: Option<NetMode>) {
     let seen = now_ms();
+    let mode = net_mode.map(|m| match m {
+        NetMode::Ethernet => "ethernet".to_string(),
+        NetMode::Wifi => "wifi".to_string(),
+    });
     let result = store::update(app, |config| {
         if let Some(device) = config.devices.iter_mut().find(|d| d.uuid == uuid) {
             device.last_seen = Some(seen);
+            if mode.is_some() && device.net_mode != mode {
+                device.net_mode = mode.clone();
+            }
         }
         Ok(())
     });
@@ -271,8 +380,7 @@ fn persist_last_seen(app: &AppHandle, uuid: &str) {
     }
 }
 
-/// Start a poll task for every saved device (FR-6: re-poll known devices on
-/// startup). Called from `run()`'s setup, after the config is loaded.
+/// Start a poll task for every saved device (FR-6: re-poll on startup).
 pub fn start_saved(app: &AppHandle) {
     let state = app.state::<AppState>();
     for device in store::get(app).devices {
@@ -280,7 +388,6 @@ pub fn start_saved(app: &AppHandle) {
             log::warn!("skipping malformed saved device: {device:?}");
             continue;
         }
-        // Render the persisted entry immediately; the first cycle replaces it.
         state.poller.put(DeviceSnapshot::offline(
             &device.uuid,
             &device.ip,
@@ -288,5 +395,52 @@ pub fn start_saved(app: &AppHandle) {
             device.last_seen,
         ));
         state.poller.start(app, device.uuid, device.ip);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn reading_with_banner(banner_text: Option<&str>) -> Reading {
+        Reading {
+            volume: Some(30),
+            mute: false,
+            source: Some(10),
+            play_state: Some(1),
+            track: None,
+            banner: banner_text.map(DdmsBanner::parse),
+            raw: Map::new(),
+        }
+    }
+
+    #[test]
+    fn build_snapshot_prefers_ddms_name_and_devinfo_firmware() {
+        let info: DevInfo = serde_json::from_str(
+            r#"{"versioninfo":{"devicefwversion":"AR241CE_9243.16.2","mcuversion":"16"}}"#,
+        )
+        .unwrap();
+        let reading = reading_with_banner(Some(
+            "DeviceName:Lofficina-main\r\nState:S\r\nNETMODE:ETH0\r\nWIFIBAND:ETH\r\nCAST_MODEL:LP10\r\n",
+        ));
+        let snap = build_snapshot("U1", "192.168.10.104", None, Some(&info), "fallback", &reading, 42);
+        assert_eq!(snap.uuid, "U1");
+        assert_eq!(snap.name, "Lofficina-main");
+        assert_eq!(snap.display_name, "Lofficina-main");
+        assert_eq!(snap.firmware, "AR241CE_9243.16.2");
+        assert_eq!(snap.model, "LP10");
+        assert_eq!(snap.net_mode, Some(NetMode::Ethernet));
+        assert_eq!(snap.wifi_band.as_deref(), Some("ETH"));
+        assert_eq!(snap.role, Role::Solo);
+        assert_eq!(snap.volume, Some(30));
+        assert!(snap.online);
+    }
+
+    #[test]
+    fn build_snapshot_alias_wins_display_name() {
+        let reading = reading_with_banner(None);
+        let snap = build_snapshot("U1", "1.2.3.4", Some("Cucina".into()), None, "LP10", &reading, 1);
+        assert_eq!(snap.display_name, "Cucina");
+        assert_eq!(snap.name, "LP10", "device name still recorded");
     }
 }

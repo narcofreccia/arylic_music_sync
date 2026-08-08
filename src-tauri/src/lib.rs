@@ -1,20 +1,21 @@
 //! MusicSync desktop core.
 //!
 //! The Rust side owns everything that touches the network: LP10 discovery
-//! (mDNS/SSDP + subnet sweep), the typed Linkplay HTTP client, the status
-//! poller and the group-integrity guard. Doing the device HTTP from here (not
-//! the webview) sidesteps CORS/mixed-content entirely — see brief.md NFR-4.
+//! (DDMS M-SEARCH + SSDP + subnet sweep), the persistent per-device Luci client,
+//! the status poller and (later) the group-integrity guard. Doing the device I/O
+//! from here (not the webview) sidesteps CORS/mixed-content entirely, and the
+//! Luci channel needs a native TLS stack the browser cannot offer.
 //!
 //! The SvelteKit frontend talks to it exclusively through Tauri commands and
-//! events. M1 ships the local-profile auth surface (`commands::auth`); M2 adds
-//! the Linkplay client, the per-device poller and manual device management; M3
-//! adds discovery (`discovery`, `commands::scan`). Grouping (M4) and the Group
-//! Guard (M5) follow.
+//! events. R1 rebases the device-control layer onto the LibreWireless **Luci**
+//! protocol (`luci`), because the LP10 does not speak the classic Linkplay
+//! httpapi (docs/firmware-notes.md). Grouping (R2+) builds on the DDMS state
+//! this layer already reads.
 
 pub mod commands;
 pub mod discovery;
 pub mod error;
-pub mod linkplay;
+pub mod luci;
 pub mod net;
 pub mod poller;
 pub mod state;

@@ -1,6 +1,6 @@
 /** Small display helpers shared by the device components. */
 
-/** `m:ss` from a Linkplay position/length in ms. Empty for unknown lengths. */
+/** `m:ss` from a position/length in ms. `0:00` for unknown/zero lengths. */
 export function clock(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return "0:00";
   const total = Math.floor(ms / 1000);

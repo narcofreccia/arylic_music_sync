@@ -36,8 +36,8 @@ export const commands = {
   // ------------------------------------------------------------- devices --
 
   /**
-   * FR-5: validate an IP via `getStatusEx` and persist it. Idempotent — adding
-   * a device that is already saved refreshes its IP instead of failing.
+   * FR-5: confirm an IP over Luci (`DevInfo` + a DDMS M-SEARCH) and persist it.
+   * Idempotent — re-adding a known device refreshes its IP instead of failing.
    */
   addDevice: (ip: string) => invoke<DeviceSnapshot>("add_device", { ip }),
 
@@ -51,7 +51,7 @@ export const commands = {
   /** FR-6: the persisted list, hydrated with the poller's latest state. */
   listDevices: () => invoke<DeviceSnapshot[]>("list_devices"),
 
-  /** FR-9: a live round trip, including the raw unmodelled fields. */
+  /** FR-9: a live Luci round trip, including the raw payloads for the debug pane. */
   getStatus: (uuid: string) => invoke<DeviceDetail>("get_status", { uuid }),
 
   /** Wake the device's poll loop instead of waiting out the interval. */

@@ -46,8 +46,8 @@ export function onScanProgress(
 }
 
 /**
- * A candidate that answered `getStatusEx`, emitted live rather than batched at
- * the end — a sweep takes seconds and the user should see results filling in.
+ * A confirmed candidate (a DDMS banner or a Luci `DevInfo`), emitted live rather
+ * than batched at the end — the user should see results filling in as they land.
  */
 export function onScanDeviceFound(
   handler: (candidate: DeviceCandidate) => void

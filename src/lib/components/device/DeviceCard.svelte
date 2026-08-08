@@ -5,6 +5,7 @@
   import DeviceDetailPane from "./DeviceDetail.svelte";
   import RoleBadge from "./RoleBadge.svelte";
   import SourceBadge from "./SourceBadge.svelte";
+  import NetBadge from "./NetBadge.svelte";
   import type { DeviceSnapshot } from "$lib/types";
 
   // One row of the device list (FR-6 … FR-9). Actions go straight to the
@@ -23,10 +24,10 @@
   let pushToDevice = $state(false);
 
   const nowPlaying = $derived.by(() => {
-    const player = device.player;
-    if (!player || player.status !== "play") return "";
-    const track = [player.title, player.artist].filter(Boolean).join(" — ");
-    return track || "Playing";
+    if (device.playState !== 1) return "";
+    const track = device.track;
+    const label = [track?.title, track?.artist].filter(Boolean).join(" — ");
+    return label || "Playing";
   });
 
   function startRename() {
@@ -93,9 +94,12 @@
         ></span>
         <h3 class="truncate text-sm font-medium text-white">{device.displayName}</h3>
         <span class="text-xs text-slate-500">{device.ip}</span>
+        {#if device.online}
+          <NetBadge netMode={device.netMode} wifiBand={device.wifiBand} />
+        {/if}
         <RoleBadge role={device.role} />
-        {#if device.player}
-          <SourceBadge source={device.player.source} />
+        {#if device.online && device.source !== null}
+          <SourceBadge source={device.source} />
         {/if}
       </div>
 
@@ -104,15 +108,16 @@
           Offline · {sinceLabel(device.lastSeen)}
         {:else if nowPlaying}
           ♪ {nowPlaying}
-          {#if device.player && device.player.totlen > 0}
+          {#if device.track && device.track.durationMs}
             <span class="text-slate-600">
-              · {clock(device.player.curpos)} / {clock(device.player.totlen)}</span
+              · {clock(device.track.positionMs ?? 0)} / {clock(device.track.durationMs)}</span
             >
           {/if}
-        {:else if device.player}
-          Volume {device.player.vol}{device.player.mute ? " · muted" : ""} · not playing
-        {:else if device.role.kind === "slave"}
+        {:else if device.role === "slave"}
           Following the group master
+        {:else if device.volume !== null}
+          Volume {device.volume}{device.mute ? " · muted" : ""}
+          {#if device.model}· {device.model}{/if}
         {:else}
           Online
         {/if}

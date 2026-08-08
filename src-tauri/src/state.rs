@@ -5,7 +5,6 @@ use std::sync::{Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use crate::discovery::ScanControl;
-use crate::linkplay::client::{LinkplayClient, DEFAULT_TIMEOUT};
 use crate::poller::Poller;
 use crate::store::Config;
 
@@ -65,9 +64,8 @@ pub struct AppState {
     pub config: RwLock<Config>,
     pub session: RwLock<Session>,
     pub throttle: Mutex<LoginThrottle>,
-    /// One HTTP client for every device call — shared so connections pool.
-    pub linkplay: LinkplayClient,
-    /// Per-device poll tasks and their last-known snapshots.
+    /// Per-device poll tasks (each owning a persistent Luci connection) and
+    /// their last-known snapshots.
     pub poller: Poller,
     /// The one-scan-at-a-time slot (FR-4); holds the running scan's cancel token.
     pub scan: ScanControl,
@@ -79,7 +77,6 @@ impl AppState {
             config: RwLock::new(config),
             session: RwLock::new(Session::default()),
             throttle: Mutex::new(LoginThrottle::default()),
-            linkplay: LinkplayClient::new(DEFAULT_TIMEOUT),
             poller: Poller::default(),
             scan: ScanControl::default(),
         }

@@ -3,6 +3,13 @@ import { commands, errorMessage } from "$lib/tauri/commands";
 import { onScanComplete, onScanDeviceFound, onScanProgress } from "$lib/tauri/events";
 import type { DeviceCandidate, ScanOptions, ScanPhase } from "$lib/types";
 
+/** Stable identity of a candidate: uuid, then usn, then ip — mirrors Rust. */
+export function candidateKey(c: DeviceCandidate): string {
+  if (c.uuid.trim()) return `uuid:${c.uuid.trim()}`;
+  if (c.usn.trim()) return `usn:${c.usn.trim().toLowerCase()}`;
+  return `ip:${c.ip}`;
+}
+
 /**
  * Network discovery state (FR-4) — a reactive singleton mirroring the Rust
  * scanner. Same contract as the devices store: Rust owns the truth, this only
@@ -33,7 +40,9 @@ class Scan {
   progress = $derived(this.total > 0 ? Math.min(this.scanned / this.total, 1) : null);
 
   /** Candidates not already in the device list — what "Add all new" acts on. */
-  newCandidates = $derived(this.found.filter((c) => !c.alreadyAdded && !this.added[c.uuid]));
+  newCandidates = $derived(
+    this.found.filter((c) => !c.alreadyAdded && !this.added[candidateKey(c)])
+  );
 
   #started = false;
   #unlisten: UnlistenFn[] = [];
@@ -120,8 +129,8 @@ class Scan {
   }
 
   /** Mark a candidate as added, so its row stops offering the button. */
-  markAdded(uuid: string): void {
-    this.added = { ...this.added, [uuid]: true };
+  markAdded(candidate: DeviceCandidate): void {
+    this.added = { ...this.added, [candidateKey(candidate)]: true };
   }
 
   /** Clear the results list without touching the saved devices. */
@@ -132,9 +141,10 @@ class Scan {
     this.error = "";
   }
 
-  /** Insert or refresh by UUID — the same identity the Rust side dedupes on. */
+  /** Insert or refresh by identity — the same key the Rust side dedupes on. */
   #merge(candidate: DeviceCandidate): void {
-    const at = this.found.findIndex((c) => c.uuid === candidate.uuid);
+    const key = candidateKey(candidate);
+    const at = this.found.findIndex((c) => candidateKey(c) === key);
     if (at === -1) {
       this.found = [...this.found, candidate];
       return;
