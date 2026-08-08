@@ -164,6 +164,20 @@
         </div>
       </details>
 
+      <details class="phase" open>
+        <summary><span class="badge status wip">wip</span><span class="title"><h3>S — Streaming: Spotify everywhere, synced (no Google Home)</h3> <small>librespot capture → RAOP multi-sync via cliraop sidecar</small></span></summary>
+        <div class="body">
+          <ul class="tasks">
+            <li><span class="badge status done">done</span><span class="t">S1 de-risk: RAOP multi-device sync is real (shared NTP master clock, one <code>cliraop</code> client/speaker); prebuilt <code>cliraop</code> incl Windows → bundle as sidecar, no C toolchain in CI. Design in <code>docs/STREAMING-design.md</code>.</span></li>
+            <li><span class="badge status wip">wip</span><span class="t">S2: cliraop sidecar + Rust streaming module (tee PCM, shared anchor, per-device vol/delay); validate 2-receiver sync on local <code>shairport-sync</code> rig (no LP10s).</span></li>
+            <li><span class="badge status todo">todo</span><span class="t">S3: librespot in-proc Spotify Connect capture → PCM (pin vergen build-dep first). Premium; user picks "MusicSync".</span></li>
+            <li><span class="badge status blocked">blocked</span><span class="t">S4: real-hardware bring-up — LP10 accepts bare RAOP sender? latency/drift tuning. <em>Needs LP10s on-site.</em></span></li>
+            <li><span class="badge status todo">todo</span><span class="t">S5: "Play Everywhere" UI (pick speakers into stream group, master transport, per-room volume + delay).</span></li>
+          </ul>
+          <p class="note">Turns the app from LAN controller into an audio server. Spotify ToS gray area (librespot). Per-device controller (R1/R3/R4) ships independently.</p>
+        </div>
+      </details>
+
       <h2>Commit log</h2>
       <table>
         <thead><tr><th>Date</th><th>Commit</th><th>Summary</th></tr></thead>
@@ -178,6 +192,8 @@
           <tr><td>2026-08-08</td><td class="path">b08dd3f</td><td>docs(spike): LP10 native grouping non-functional; grouping is Cast/AirPlay only</td></tr>
           <tr><td>2026-08-08</td><td class="path">6be44b5</td><td>R3: per-device playback control (volume/mute/transport/now-playing) + optimistic UI</td></tr>
           <tr><td>2026-08-08</td><td class="path">d60c843</td><td>R4: settings, theme, autostart, config export/import, packaging polish</td></tr>
+          <tr><td>2026-08-08</td><td class="path">ca2ef5d</td><td>docs: audio-streaming feasibility (librespot + AirPlay/RAOP)</td></tr>
+          <tr><td>2026-08-08</td><td class="path">2769b89</td><td>docs: streaming design + de-risk (RAOP multi-sync via cliraop sidecar)</td></tr>
         </tbody>
       </table>
 
