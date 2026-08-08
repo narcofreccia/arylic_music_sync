@@ -11,6 +11,7 @@
   import { devices } from "$lib/stores/devices.svelte";
   import { scan } from "$lib/stores/scan.svelte";
   import { toasts } from "$lib/stores/toasts.svelte";
+  import { theme } from "$lib/stores/theme.svelte";
   import { commands } from "$lib/tauri/commands";
 
   let { children } = $props();
@@ -25,6 +26,13 @@
     void session.init();
     // Silent launch check — offline/LAN-only use is normal, so never surfaces.
     void updates.start();
+
+    // Apply the persisted theme as early as possible so the shell doesn't flash
+    // the wrong palette. Failure is non-fatal — the default is dark anyway.
+    void commands
+      .getSettings()
+      .then((s) => theme.init(s.theme))
+      .catch((e) => console.error("[layout] theme init failed:", e));
 
     // Adaptive polling: tell Rust when the window gains/loses focus so the
     // poller can slow down (5 s) while the user isn't looking, speed up (2 s)

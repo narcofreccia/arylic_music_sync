@@ -62,19 +62,48 @@ pub struct SavedDevice {
 
 /// User preferences (brief.md FR-20 / FR-27). Present with defaults from M1 so
 /// later milestones only have to read them.
+///
+/// `guard_mode` / `failover_mode` are carried for on-disk back-compat only: the
+/// LP10's native DDMS grouping is non-functional (docs/firmware-notes.md §G/§H),
+/// so there is no Group Guard or master failover and the UI never surfaces them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    /// Status poll interval in ms (NFR-7: guard detection ≤ 1 cycle).
+    /// Poll-interval floor in ms. The poller runs an adaptive 2 s/5 s cadence
+    /// (focused/blurred); this is the user's override — the effective interval
+    /// is never faster than this.
     pub poll_ms: u64,
     /// CIDR for the subnet sweep; `None` = auto-detect from local interfaces.
     pub subnet: Option<String>,
+    /// UI theme: "dark" | "light" | "system".
     pub theme: String,
-    /// Group Guard behaviour: "ask" | "always" | "never".
-    pub guard_mode: String,
-    /// Master-offline failover: "prompt" | "auto" | "never".
-    pub failover_mode: String,
+    /// Per-request network budget in ms (Luci/UPnP round trips).
+    pub http_timeout_ms: u64,
+    /// Launch MusicSync at login (wired to tauri-plugin-autostart).
     pub start_at_login: bool,
+    /// Deprecated — grouping is unsupported on LP10. Kept for config back-compat.
+    #[serde(default = "default_guard_mode")]
+    pub guard_mode: String,
+    /// Deprecated — grouping is unsupported on LP10. Kept for config back-compat.
+    #[serde(default = "default_failover_mode")]
+    pub failover_mode: String,
+}
+
+/// Poll-interval floor bounds. Below `MIN` the LAN is hammered for nothing;
+/// above `MAX` the UI feels dead.
+pub const MIN_POLL_MS: u64 = 1_000;
+pub const MAX_POLL_MS: u64 = 60_000;
+/// Per-request timeout bounds.
+pub const MIN_HTTP_TIMEOUT_MS: u64 = 500;
+pub const MAX_HTTP_TIMEOUT_MS: u64 = 30_000;
+/// The themes the UI can render; anything else falls back to "dark".
+pub const THEMES: [&str; 3] = ["dark", "light", "system"];
+
+fn default_guard_mode() -> String {
+    "ask".into()
+}
+fn default_failover_mode() -> String {
+    "prompt".into()
 }
 
 impl Default for Settings {
@@ -83,9 +112,23 @@ impl Default for Settings {
             poll_ms: 3000,
             subnet: None,
             theme: "dark".into(),
-            guard_mode: "ask".into(),
-            failover_mode: "prompt".into(),
+            http_timeout_ms: 4000,
             start_at_login: false,
+            guard_mode: default_guard_mode(),
+            failover_mode: default_failover_mode(),
+        }
+    }
+}
+
+impl Settings {
+    /// Clamp numeric fields into range and normalise the theme. Applied on every
+    /// mutation so a hand-edited or imported config can never drive the app into
+    /// a pathological state (a 0 ms poll, an unknown theme).
+    pub fn sanitize(&mut self) {
+        self.poll_ms = self.poll_ms.clamp(MIN_POLL_MS, MAX_POLL_MS);
+        self.http_timeout_ms = self.http_timeout_ms.clamp(MIN_HTTP_TIMEOUT_MS, MAX_HTTP_TIMEOUT_MS);
+        if !THEMES.contains(&self.theme.as_str()) {
+            self.theme = "dark".into();
         }
     }
 }
@@ -98,6 +141,51 @@ pub struct Config {
     pub settings: Settings,
     /// FR-2: skip the login screen on this machine.
     pub remember_me: bool,
+}
+
+/// A portable slice of the config (FR-21): everything worth carrying between
+/// machines — settings + saved devices — and, by construction, **nothing else**.
+/// Auth (the Argon2 hash) and the "remember me" grant are not fields here, so an
+/// export can never leak a credential and an import can never overwrite one.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigBundle {
+    pub settings: Settings,
+    #[serde(default)]
+    pub devices: Vec<SavedDevice>,
+}
+
+/// Build the export bundle. Pure — the command layer only adds file I/O.
+pub fn export_bundle(config: &Config) -> ConfigBundle {
+    ConfigBundle {
+        settings: config.settings.clone(),
+        devices: config.devices.clone(),
+    }
+}
+
+/// Merge an imported bundle into `config` in place, preserving auth + remember_me
+/// (those aren't in the bundle, so they're simply left alone). Settings are
+/// replaced wholesale (then sanitised); devices are unioned by uuid — an imported
+/// device updates a matching saved one, otherwise it's appended. Pure and
+/// unit-tested. Returns the number of devices added or updated.
+pub fn merge_bundle(config: &mut Config, bundle: ConfigBundle) -> usize {
+    config.settings = bundle.settings;
+    config.settings.sanitize();
+
+    let mut touched = 0;
+    for dev in bundle.devices {
+        // A device with no identity at all is junk from a hand-edited file.
+        if dev.uuid.is_empty() && dev.usn.is_empty() && dev.ip.is_empty() {
+            continue;
+        }
+        match config.devices.iter_mut().find(|d| {
+            (!dev.uuid.is_empty() && d.uuid == dev.uuid) || (!dev.usn.is_empty() && d.usn == dev.usn)
+        }) {
+            Some(existing) => *existing = dev,
+            None => config.devices.push(dev),
+        }
+        touched += 1;
+    }
+    touched
 }
 
 /// Read `settings.json` once at startup. A missing or partially-written file is
@@ -149,4 +237,127 @@ where
     let out = f(&mut guard)?;
     persist(app, &guard)?;
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn device(uuid: &str, ip: &str) -> SavedDevice {
+        SavedDevice {
+            uuid: uuid.into(),
+            ip: ip.into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn sanitize_clamps_and_normalises() {
+        let mut s = Settings {
+            poll_ms: 0,
+            http_timeout_ms: 999_999,
+            theme: "solarized".into(),
+            ..Settings::default()
+        };
+        s.sanitize();
+        assert_eq!(s.poll_ms, MIN_POLL_MS);
+        assert_eq!(s.http_timeout_ms, MAX_HTTP_TIMEOUT_MS);
+        assert_eq!(s.theme, "dark", "unknown theme falls back to dark");
+
+        let mut ok = Settings {
+            poll_ms: 4000,
+            http_timeout_ms: 2000,
+            theme: "system".into(),
+            ..Settings::default()
+        };
+        ok.sanitize();
+        assert_eq!(ok.poll_ms, 4000);
+        assert_eq!(ok.theme, "system", "valid theme is preserved");
+    }
+
+    #[test]
+    fn export_bundle_omits_auth_and_remember_me() {
+        let config = Config {
+            auth: Some(AuthConfig {
+                username: "andrea".into(),
+                password_hash: Some("$argon2id$secret".into()),
+            }),
+            devices: vec![device("U1", "1.2.3.4")],
+            settings: Settings::default(),
+            remember_me: true,
+        };
+        let bundle = export_bundle(&config);
+        // The serialized export must not carry the hash or the login grant.
+        let json = serde_json::to_string(&bundle).unwrap();
+        assert!(!json.contains("argon2"), "auth hash must be stripped");
+        assert!(!json.contains("remember_me"), "login grant must not export");
+        assert!(!json.contains("password_hash"));
+        assert_eq!(bundle.devices.len(), 1);
+    }
+
+    #[test]
+    fn merge_bundle_preserves_auth_and_unions_devices() {
+        let mut config = Config {
+            auth: Some(AuthConfig {
+                username: "andrea".into(),
+                password_hash: Some("$argon2id$keep-me".into()),
+            }),
+            devices: vec![device("U1", "1.1.1.1"), device("U2", "2.2.2.2")],
+            settings: Settings::default(),
+            remember_me: true,
+        };
+        let bundle = ConfigBundle {
+            settings: Settings {
+                theme: "light".into(),
+                ..Settings::default()
+            },
+            // U1 moved IP (update in place); U3 is new (append).
+            devices: vec![device("U1", "9.9.9.9"), device("U3", "3.3.3.3")],
+        };
+        let touched = merge_bundle(&mut config, bundle);
+        assert_eq!(touched, 2);
+
+        // Auth + remember_me untouched by the import.
+        assert_eq!(config.auth.unwrap().password_hash.unwrap(), "$argon2id$keep-me");
+        assert!(config.remember_me);
+
+        // Settings replaced from the bundle.
+        assert_eq!(config.settings.theme, "light");
+
+        // Devices unioned by uuid, not duplicated.
+        assert_eq!(config.devices.len(), 3);
+        let u1 = config.devices.iter().find(|d| d.uuid == "U1").unwrap();
+        assert_eq!(u1.ip, "9.9.9.9", "matching uuid updates in place");
+        assert!(config.devices.iter().any(|d| d.uuid == "U3"));
+    }
+
+    #[test]
+    fn merge_bundle_sanitises_imported_settings() {
+        let mut config = Config::default();
+        let bundle = ConfigBundle {
+            settings: Settings {
+                poll_ms: 0,
+                theme: "neon".into(),
+                ..Settings::default()
+            },
+            devices: vec![],
+        };
+        merge_bundle(&mut config, bundle);
+        assert_eq!(config.settings.poll_ms, MIN_POLL_MS);
+        assert_eq!(config.settings.theme, "dark");
+    }
+
+    #[test]
+    fn import_json_never_injects_auth() {
+        // A crafted file with an `auth` key must be ignored: ConfigBundle has no
+        // such field, so serde drops it.
+        let json = r#"{"settings":{},"devices":[],"auth":{"username":"evil","password_hash":"x"}}"#;
+        let bundle: ConfigBundle = serde_json::from_str(json).unwrap();
+        let mut config = Config {
+            auth: Some(AuthConfig { username: "me".into(), password_hash: Some("real".into()) }),
+            ..Config::default()
+        };
+        merge_bundle(&mut config, bundle);
+        assert_eq!(config.auth.unwrap().password_hash.unwrap(), "real");
+    }
 }

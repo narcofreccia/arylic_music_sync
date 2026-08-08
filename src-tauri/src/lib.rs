@@ -30,6 +30,12 @@ use crate::state::AppState;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::default().build())
+        // FR-27 start-at-login. LaunchAgent on macOS; the plugin picks the
+        // platform-appropriate mechanism elsewhere. No launch args are passed.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
@@ -73,8 +79,13 @@ pub fn run() {
             commands::scan::scan,
             commands::scan::cancel_scan,
             commands::settings::get_settings,
+            commands::settings::update_settings,
             commands::settings::set_subnet,
             commands::settings::set_poll_profile,
+            commands::settings::export_config,
+            commands::settings::import_config,
+            commands::settings::export_config_file,
+            commands::settings::import_config_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running MusicSync");

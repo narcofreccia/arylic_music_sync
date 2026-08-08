@@ -139,12 +139,25 @@ export interface ScanComplete {
   cancelled: boolean;
 }
 
+/** UI theme. `system` follows the OS `prefers-color-scheme`. */
+export type Theme = "dark" | "light" | "system";
+
 /** User preferences (FR-20 / FR-27), persisted in settings.json. */
 export interface Settings {
+  /** Poll-interval floor in ms (the poller's adaptive cadence never beats it). */
   poll_ms: number;
   subnet: string | null;
-  theme: string;
-  guard_mode: "ask" | "always" | "never";
-  failover_mode: "prompt" | "auto" | "never";
+  theme: Theme;
+  /** Per-request network budget in ms. */
+  http_timeout_ms: number;
   start_at_login: boolean;
+  // Grouping is unsupported on the LP10 (firmware-notes §G/§H); these two are
+  // kept only for on-disk back-compat and are never surfaced in the UI.
+  guard_mode?: string;
+  failover_mode?: string;
 }
+
+/** Partial settings update for `update_settings`; only changed fields are sent. */
+export type SettingsPatch = Partial<
+  Pick<Settings, "poll_ms" | "theme" | "http_timeout_ms" | "start_at_login">
+>;

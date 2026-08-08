@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "MusicSync — Arylic LP10 LAN multiroom controller"
 authors = ["MusicSync"]
 edition = "2021"
-rust-version = "1.77"
+# 1.82: the codebase uses `Option::is_none_or` (discovery.rs), stable since 1.82.
+rust-version = "1.82"
 
 [lib]
 # `_lib` suffix keeps the lib name distinct from the bin (Windows linker issue).
@@ -20,6 +21,7 @@ tauri-plugin-updater = "2.10"
 tauri-plugin-store = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2"
+tauri-plugin-autostart = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-log = "2"
@@ -27,10 +29,8 @@ tauri-plugin-log = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-anyhow = "1"
 
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "net"] }
-futures-util = "0.3"
 
 # Luci control protocol (LibreWireless) — TCP 7777 + TLS 1.2, mutual auth with an
 # embedded client cert. The device's own cert is self-signed and not validated
@@ -45,6 +45,7 @@ ipnet = "2"
 
 # Local profile auth (FR-1): Argon2 password hash, no cloud account server.
 argon2 = "0.5"
+# Pulls rand_core's `getrandom` feature so argon2's OsRng salt source resolves.
 rand = "0.8"
 
 log = "0.4"

@@ -189,15 +189,15 @@ pub(crate) async fn read_once(client: &LuciClient, ip: &str, position_ms: Option
         }
     };
 
-    let play_state = client.read(MessageBox::PlayState).await.ok().map(|p| {
+    let play_state = client.read(MessageBox::PlayState).await.ok().and_then(|p| {
         raw.insert("playState".into(), json!(p));
         model::parse_play_state(&p)
-    }).flatten();
+    });
 
-    let source = client.read(MessageBox::CurrSource).await.ok().map(|p| {
+    let source = client.read(MessageBox::CurrSource).await.ok().and_then(|p| {
         raw.insert("currSource".into(), json!(p));
         model::parse_source(&p)
-    }).flatten();
+    });
 
     // Now-playing. Luci `TRACK_INFO(44)` does not answer on this firmware (it
     // times out even mid-playback), so metadata comes from UPnP GetPositionInfo
@@ -316,7 +316,9 @@ async fn run(app: AppHandle, uuid: String, ip: String, kick: std::sync::Arc<Noti
         let config = store::get(&app);
         let saved = config.devices.iter().find(|d| d.uuid == uuid);
         let alias = saved.and_then(|d| d.alias.clone());
-        let poll_ms = app.state::<AppState>().poller.poll_interval_ms();
+        // Adaptive cadence, never faster than the user's configured floor.
+        let floor = config.settings.poll_ms.clamp(store::MIN_POLL_MS, store::MAX_POLL_MS);
+        let poll_ms = app.state::<AppState>().poller.poll_interval_ms().max(floor);
 
         // (Re)connect if needed. A fresh connection reloads the cached identity.
         if client.is_none() {

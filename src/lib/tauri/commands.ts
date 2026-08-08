@@ -8,6 +8,7 @@ import type {
   PlayerCmd,
   ScanOptions,
   Settings,
+  SettingsPatch,
 } from "$lib/types";
 
 /**
@@ -91,8 +92,23 @@ export const commands = {
 
   getSettings: () => invoke<Settings>("get_settings"),
 
+  /** FR-20 / FR-27: partial update (poll floor, theme, timeout, autostart). */
+  updateSettings: (patch: SettingsPatch) => invoke<Settings>("update_settings", { patch }),
+
   /** FR-20: sweep default. `null` restores auto-detection. Validates the CIDR. */
   setSubnet: (cidr: string | null) => invoke<Settings>("set_subnet", { cidr }),
+
+  /**
+   * FR-21: pick a file and write settings + devices there (auth stripped).
+   * Resolves `false` if the save dialog was cancelled.
+   */
+  exportConfigFile: () => invoke<boolean>("export_config_file"),
+
+  /**
+   * FR-21: pick a config file and merge it in (auth untouched). Resolves the
+   * merged settings, or `null` if the open dialog was cancelled.
+   */
+  importConfigFile: () => invoke<Settings | null>("import_config_file"),
 };
 
 /** True when the rejection is the Rust `{ code, message }` envelope. */

@@ -242,21 +242,21 @@ impl Track {
             track.title = pick(&["title", "Title", "TITLE", "trackName"]);
             track.artist = pick(&["artist", "Artist", "ARTIST", "artistName"]);
             track.album = pick(&["album", "Album", "ALBUM", "albumName"]);
-            let num = |keys: &[&str]| -> Option<u64> {
-                for k in keys {
-                    match map.get(*k) {
-                        Some(Value::Number(n)) => return n.as_u64(),
-                        Some(Value::String(s)) => {
-                            if let Ok(v) = s.trim().parse() {
-                                return Some(v);
-                            }
-                        }
-                        _ => {}
+            for k in ["duration", "totlen", "totalTime", "durationMs"] {
+                match map.get(k) {
+                    Some(Value::Number(n)) => {
+                        track.duration_ms = n.as_u64();
+                        break;
                     }
+                    Some(Value::String(s)) => {
+                        if let Ok(v) = s.trim().parse() {
+                            track.duration_ms = Some(v);
+                            break;
+                        }
+                    }
+                    _ => {}
                 }
-                None
-            };
-            track.duration_ms = num(&["duration", "totlen", "totalTime", "durationMs"]);
+            }
         }
         track
     }

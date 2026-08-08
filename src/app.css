@@ -12,6 +12,22 @@
   color-scheme: dark;
 }
 
+/* FR-27 light theme. The theme store stamps `data-theme` on <html>; here we
+   swap the surface tokens so the shell flips. MusicSync is dark-first (the
+   default look), so light re-tints the same tokens rather than being a separate
+   design. Native controls follow `color-scheme`. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-surface: #f4f6f8;
+  --color-surface-raised: #ffffff;
+  --color-border-subtle: #d5dbe2;
+  --color-accent: #0284c7;
+}
+
+:root[data-theme="light"] body {
+  color: #1f2933;
+}
+
 html,
 body {
   height: 100%;
