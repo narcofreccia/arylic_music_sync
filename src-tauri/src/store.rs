@@ -433,6 +433,7 @@ mod tests {
             devices: vec![device("U1", "1.2.3.4")],
             settings: Settings::default(),
             remember_me: true,
+            ..Config::default()
         };
         let bundle = export_bundle(&config);
         // The serialized export must not carry the hash or the login grant.
@@ -453,6 +454,7 @@ mod tests {
             devices: vec![device("U1", "1.1.1.1"), device("U2", "2.2.2.2")],
             settings: Settings::default(),
             remember_me: true,
+            ..Config::default()
         };
         let bundle = ConfigBundle {
             settings: Settings {

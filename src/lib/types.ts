@@ -202,12 +202,25 @@ export interface SpotifyState {
  * discovered device so we can label it and remember per-room settings.
  */
 export interface StreamTarget {
-  /** MusicSync device UUID (absent for the local test rig). */
+  /** MusicSync device UUID or manual-target id (absent for the raw local rig). */
   uuid: string | null;
   name: string;
   ip: string;
   /** RAOP control port — 5000 for AirPlay 1. */
   raop_port: number;
+}
+
+/**
+ * A manually-added RAOP receiver (`ManualTarget` in Rust) — a name + `ip:port`
+ * with no DDMS/UPnP identity. Lets "Play Everywhere" target any AirPlay/RAOP
+ * receiver (e.g. a local `shairport-sync`) without real LP10 hardware.
+ */
+export interface ManualTarget {
+  /** Stable local id (`manual-<hex>`); the delay-persistence key too. */
+  id: string;
+  name: string;
+  ip: string;
+  port: number;
 }
 
 /** Where the streamed PCM comes from (`StreamSource` in Rust, tagged by `kind`). */
@@ -225,6 +238,8 @@ export interface StreamDeviceStatus {
   ip: string;
   name: string;
   raop_port: number;
+  /** Persistence key for this target's delay (device UUID / manual-id / IP). */
+  key: string;
   /** Software volume gain, `0.0..=1.0`. */
   volume: number;
   /** Software delay applied ahead of this receiver's audio (ms). */

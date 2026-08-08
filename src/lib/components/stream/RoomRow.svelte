@@ -8,13 +8,14 @@
   // health, plus a volume slider (0..100 → 0..1) and a delay (ms) slider. Both
   // are optimistic in the store, so this component just reflects and fires.
 
-  let { room }: { room: StreamDeviceStatus } = $props();
+  import { MAX_DELAY_MS } from "$lib/stores/stream.svelte";
 
-  /** Max per-room delay the slider offers (ms) — enough to trim room-to-room skew. */
-  const MAX_DELAY_MS = 500;
+  let { room }: { room: StreamDeviceStatus } = $props();
 
   // Match the live sender IP back to a discovered device for its net badge.
   const device = $derived(devices.list.find((d) => d.ip === room.ip));
+  // A live receiver with no matching discovered device is a manual target.
+  const manual = $derived(stream.manualTargets.some((m) => m.id === room.key));
 
   const volumePct = $derived(Math.round(room.volume * 100));
 
@@ -25,7 +26,8 @@
 
   function onDelay(event: Event) {
     const ms = Number((event.currentTarget as HTMLInputElement).value);
-    stream.setDeviceDelay(room.ip, ms);
+    // Persist by key, and pass the live IP so the slider updates live too.
+    stream.setTargetDelay(room.key, ms, room.ip);
   }
 </script>
 
@@ -37,9 +39,14 @@
       aria-hidden="true"
     ></span>
     <span class="truncate text-sm font-medium text-white">{room.name}</span>
-    <span class="font-mono text-xs text-slate-500">{room.ip}</span>
+    <span class="font-mono text-xs text-slate-500">{room.ip}:{room.raop_port}</span>
     {#if device}
       <NetBadge netMode={device.netMode} wifiBand={device.wifiBand} />
+    {:else if manual}
+      <span
+        class="rounded bg-[var(--color-surface-raised)] px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-slate-400 uppercase"
+        >manual</span
+      >
     {/if}
     {#if !room.alive}
       <span class="ml-auto text-xs text-red-300">disconnected</span>
@@ -71,7 +78,7 @@
       type="range"
       min="0"
       max={MAX_DELAY_MS}
-      step="5"
+      step="10"
       value={room.delay_ms}
       oninput={onDelay}
       aria-label="{room.name} delay in milliseconds"

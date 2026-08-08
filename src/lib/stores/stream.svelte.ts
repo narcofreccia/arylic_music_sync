@@ -4,6 +4,7 @@ import { onSpotifyState, onStreamState } from "$lib/tauri/events";
 import { toasts } from "$lib/stores/toasts.svelte";
 import { devices } from "$lib/stores/devices.svelte";
 import type {
+  ManualTarget,
   PlayerCmd,
   SpotifyState,
   StreamDeviceStatus,
@@ -13,6 +14,9 @@ import type {
 
 /** AirPlay-1 RAOP control port the LP10 listens on (design doc §4). */
 const RAOP_PORT = 5000;
+
+/** Widest per-device delay the tuner offers (ms), matching the Rust clamp. */
+export const MAX_DELAY_MS = 2000;
 
 /** Optimistic tuning for the per-room sliders (mirrors the devices store). */
 const VOLUME_DEBOUNCE_MS = 80;
@@ -57,6 +61,11 @@ class Stream {
   /** Latest `stream-state` (idle when nothing is streaming). */
   status = $state<StreamStatus>(idleStatus());
 
+  /** Manually-added RAOP receivers (Feature 1), persisted in Rust. */
+  manualTargets = $state<ManualTarget[]>([]);
+  /** Persisted per-target delays (ms), keyed by device UUID / manual-id / IP. */
+  delays = $state<Record<string, number>>({});
+
   /** True once listeners are registered and the initial status hydrated. */
   loading = $state(true);
 
@@ -77,6 +86,7 @@ class Stream {
   /** Debounce timers + monotonic seqs per IP, so only the latest write sends. */
   #volTimer: Record<string, ReturnType<typeof setTimeout>> = {};
   #volSeq: Record<string, number> = {};
+  /** Delay debounce timers + seqs keyed by target key (not IP). */
   #delayTimer: Record<string, ReturnType<typeof setTimeout>> = {};
   #delaySeq: Record<string, number> = {};
 
@@ -109,16 +119,36 @@ class Stream {
   /** Pull the current Spotify + streaming status once at boot. */
   async hydrate(): Promise<void> {
     try {
-      const [spotify, status] = await Promise.all([
+      const [spotify, status, manual, delays] = await Promise.all([
         commands.spotifyStatus(),
         commands.streamStatus(),
+        commands.listManualTargets(),
+        commands.listTargetDelays(),
       ]);
       this.spotify = spotify;
+      this.manualTargets = manual;
+      this.delays = delays;
       this.#applyStatus(status);
     } catch (e) {
       console.error("[stream] status hydration failed:", e);
     } finally {
       this.loading = false;
+    }
+  }
+
+  // ----------------------------------------------- manual targets (F1) --
+
+  /** Add a manual RAOP receiver; throws the `{ code, message }` envelope. */
+  async addManualTarget(name: string, ip: string, port: number): Promise<void> {
+    this.manualTargets = await commands.addManualTarget(name, ip, port);
+  }
+
+  /** Remove a manual target by id. */
+  async removeManualTarget(id: string): Promise<void> {
+    try {
+      this.manualTargets = await commands.removeManualTarget(id);
+    } catch (e) {
+      toasts.error(errorMessage(e, "Could not remove that speaker."));
     }
   }
 
@@ -168,20 +198,23 @@ class Stream {
   // ---------------------------------------------------------- streaming (S2) --
 
   /**
-   * Start streaming Spotify to the selected devices in sync. `targetUuids` are
-   * device UUIDs from the devices store; each resolves to its current IP.
+   * Start streaming Spotify to the selected speakers in sync. `keys` are the
+   * picker's selection: each is either a discovered device UUID (resolved to its
+   * current IP) or a manual-target id (a name + `ip:port`).
    */
-  async startStream(targetUuids: string[]): Promise<void> {
+  async startStream(keys: string[]): Promise<void> {
     const targets: StreamTarget[] = [];
-    for (const uuid of targetUuids) {
-      const device = devices.get(uuid);
-      if (!device) continue;
-      targets.push({
-        uuid,
-        name: device.displayName,
-        ip: device.ip,
-        raop_port: RAOP_PORT,
-      });
+    for (const key of keys) {
+      const manual = this.manualTargets.find((m) => m.id === key);
+      if (manual) {
+        // The manual id rides in `uuid` so it keys the persisted delay too.
+        targets.push({ uuid: manual.id, name: manual.name, ip: manual.ip, raop_port: manual.port });
+        continue;
+      }
+      const device = devices.get(key);
+      if (device) {
+        targets.push({ uuid: key, name: device.displayName, ip: device.ip, raop_port: RAOP_PORT });
+      }
     }
     if (targets.length === 0) {
       toasts.error("Pick at least one speaker to play to.");
@@ -227,20 +260,38 @@ class Stream {
     }, VOLUME_DEBOUNCE_MS);
   }
 
-  /** Optimistic per-room delay in ms (trims room-to-room skew). */
-  setDeviceDelay(ip: string, ms: number): void {
-    const clamped = Math.max(0, Math.round(ms));
-    this.#overlay(ip, { delayMs: clamped }, DELAY_GRACE_MS);
+  /** The saved delay (ms) for a target key — the picker's pre-tune baseline. */
+  getDelay(key: string): number {
+    return this.delays[key] ?? 0;
+  }
 
-    clearTimeout(this.#delayTimer[ip]);
-    const seq = (this.#delaySeq[ip] = (this.#delaySeq[ip] ?? 0) + 1);
-    this.#delayTimer[ip] = setTimeout(async () => {
+  /**
+   * Persist a per-target delay (ms), optimistically and debounced (Feature 2).
+   * `key` is the delay-persistence key (device UUID / manual-id / IP). Pass the
+   * live receiver `ip` while streaming so the RoomRow slider also updates the
+   * live status until the confirming `stream-state` event lands.
+   */
+  setTargetDelay(key: string, ms: number, ip?: string): void {
+    const clamped = Math.max(0, Math.min(MAX_DELAY_MS, Math.round(ms)));
+    this.delays = { ...this.delays, [key]: clamped };
+    if (ip) this.#overlay(ip, { delayMs: clamped }, DELAY_GRACE_MS);
+
+    clearTimeout(this.#delayTimer[key]);
+    const seq = (this.#delaySeq[key] = (this.#delaySeq[key] ?? 0) + 1);
+    this.#delayTimer[key] = setTimeout(async () => {
       try {
-        this.#applyStatus(await commands.streamSetDeviceDelay(ip, clamped));
-        this.#extend(ip, DELAY_GRACE_MS);
+        const applied = await commands.setTargetDelay(key, clamped);
+        this.delays = { ...this.delays, [key]: applied };
+        if (ip) this.#extend(ip, DELAY_GRACE_MS);
       } catch (e) {
-        if (seq === this.#delaySeq[ip]) {
-          this.#rollback(ip, "delayMs");
+        if (seq === this.#delaySeq[key]) {
+          if (ip) this.#rollback(ip, "delayMs");
+          // Re-sync the tuner baseline to the persisted truth.
+          try {
+            this.delays = await commands.listTargetDelays();
+          } catch {
+            /* keep the optimistic value if the reload also fails */
+          }
           toasts.error(errorMessage(e, "Could not set the delay."));
         }
       }

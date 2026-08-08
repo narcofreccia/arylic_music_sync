@@ -1,6 +1,5 @@
 <script lang="ts">
   import { stream } from "$lib/stores/stream.svelte";
-  import { devices } from "$lib/stores/devices.svelte";
   import SpotifyNowPlaying from "$lib/components/stream/SpotifyNowPlaying.svelte";
   import StreamGroupPicker from "$lib/components/stream/StreamGroupPicker.svelte";
   import RoomRow from "$lib/components/stream/RoomRow.svelte";
@@ -20,11 +19,11 @@
   const canTransport = $derived(stream.spotifyConnected);
 
   // Once streaming, the live group is whatever Rust reports; keep the picker
-  // selection in sync so stopping and restarting keeps the same rooms.
+  // selection in sync (by target key) so stopping and restarting keeps the same
+  // rooms — discovered devices and manual targets alike.
   $effect(() => {
     if (stream.streaming) {
-      const ips = new Set(stream.targets.map((t) => t.ip));
-      selected = devices.list.filter((d) => ips.has(d.ip)).map((d) => d.uuid);
+      selected = stream.targets.map((t) => t.key);
     }
   });
 </script>

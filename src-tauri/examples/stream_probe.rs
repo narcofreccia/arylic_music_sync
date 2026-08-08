@@ -26,6 +26,7 @@ fn parse_target(spec: &str, idx: usize) -> StreamTarget {
         name: format!("FakeLP10-{}", (b'A' + idx as u8) as char),
         ip,
         raop_port: port,
+        delay_ms: 0,
     }
 }
 

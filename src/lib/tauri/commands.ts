@@ -5,6 +5,7 @@ import type {
   DeviceCandidate,
   DeviceDetail,
   DeviceSnapshot,
+  ManualTarget,
   PlayerCmd,
   ScanOptions,
   Settings,
@@ -159,6 +160,35 @@ export const commands = {
 
   /** Current streaming status (idle when nothing is playing). */
   streamStatus: () => invoke<StreamStatus>("stream_status"),
+
+  // ------------------------------------------------- manual targets (F1) --
+
+  /**
+   * Add a manual RAOP receiver by name + `ip:port` (e.g. a local
+   * `shairport-sync`). Resolves the full manual-target list.
+   */
+  addManualTarget: (name: string, ip: string, port: number) =>
+    invoke<ManualTarget[]>("add_manual_target", { name, ip, port }),
+
+  /** Remove a manual target by id. Resolves the remaining list. */
+  removeManualTarget: (id: string) =>
+    invoke<ManualTarget[]>("remove_manual_target", { id }),
+
+  /** The persisted manual targets. */
+  listManualTargets: () => invoke<ManualTarget[]>("list_manual_targets"),
+
+  // ----------------------------------------------- per-device delay (F2) --
+
+  /** The persisted per-target delays, keyed by device UUID / manual-id / IP. */
+  listTargetDelays: () => invoke<Record<string, number>>("list_target_delays"),
+
+  /**
+   * Persist a per-target delay (clamped 0..=2000 ms) and apply it live when
+   * streaming. Works pre-stream too, for tuning ahead of time. Resolves the
+   * clamped ms actually stored.
+   */
+  setTargetDelay: (key: string, ms: number) =>
+    invoke<number>("set_target_delay", { key, ms }),
 };
 
 /** True when the rejection is the Rust `{ code, message }` envelope. */
